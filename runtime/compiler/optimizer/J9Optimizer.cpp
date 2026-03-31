@@ -86,6 +86,8 @@
 #include "optimizer/MethodHandleTransformer.hpp"
 #include "optimizer/VectorAPIExpansion.hpp"
 #include "optimizer/CatchBlockProfiler.hpp"
+//preet
+#include "optimizer/PreetOptimization.hpp"
 
 static const OptimizationStrategy J9EarlyGlobalOpts[] = {
     { OMR::stringBuilderTransformer },
@@ -275,6 +277,11 @@ static const OptimizationStrategy noOptStrategyOpts[] = {
 // ***************************************************************************
 
 static const OptimizationStrategy coldStrategyOpts[] = {
+       //preet
+   {OMR::expensiveObjectAllocationGroup, OMR::Always},
+   // preet
+   {OMR::preetOptimization, OMR::Always},
+
     { OMR::trivialDeadTreeRemoval, OMR::IfEnabled },
     { OMR::coldBlockOutlining },
     { OMR::stringBuilderTransformer, OMR::IfNotQuickStart },
@@ -653,6 +660,9 @@ J9::Optimizer::Optimizer(TR::Compilation *comp, TR::ResolvedMethodSymbol *method
     : OMR::Optimizer(comp, methodSymbol, isIlGen, strategy, VNType)
 {
     // initialize additional J9 optimizations
+   // preet
+     _opts[OMR::preetOptimization]
+        = new (comp->allocator()) TR::OptimizationManager(self(), TR_PreetOptimization::create, OMR::preetOptimization);
 
     _opts[OMR::inlining] = new (comp->allocator()) TR::OptimizationManager(self(), TR_Inliner::create, OMR::inlining);
     _opts[OMR::targetedInlining]

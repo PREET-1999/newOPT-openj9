@@ -63,6 +63,7 @@ j9jit_files(
 	optimizer/OSRGuardInsertion.cpp
 	optimizer/OSRGuardRemoval.cpp
 	optimizer/PreEscapeAnalysis.cpp
+	optimizer/PreetOptimization.cpp
 	optimizer/PostEscapeAnalysis.cpp
 	optimizer/ProfileGenerator.cpp
 	optimizer/SequentialStoreSimplifier.cpp
@@ -78,4 +79,15 @@ j9jit_files(
 	optimizer/VectorAPIExpansion.cpp
 	optimizer/VPBCDConstraint.cpp
 	optimizer/TreeLowering.cpp
+	optimizer/preetAnalysis/IntraDataFlow.cpp
+	optimizer/preetAnalysis/statements/Statement.cpp
+	optimizer/preetAnalysis/statements/ObjectAllocationStmt.cpp
+	optimizer/preetAnalysis/statements/StoreStmt.cpp
+	optimizer/preetAnalysis/statements/LoadStmt.cpp
+	optimizer/preetAnalysis/statements/CopyStmt.cpp
+	optimizer/preetAnalysis/statements/CallStmt.cpp
+	optimizer/preetAnalysis/statements/UnknownStmt.cpp
+
+
+
 )
