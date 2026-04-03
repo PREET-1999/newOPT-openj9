@@ -20,7 +20,9 @@ public:
     // std::set<TR::Node*> getNodeToBeStoredIntoBase();
     TR::SymbolReference* getSymRef();
     //function to get the slot for lhs auto variable 
-    int getAuto();
+    int getlhsAuto(); // a->auto a=b.f
+        int getrhsAuto(); //b->auto  a =b.f
+
 };
 
 #endif

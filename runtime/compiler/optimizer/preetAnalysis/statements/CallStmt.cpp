@@ -48,21 +48,28 @@ PTG *CallStmt::Gen()
 
     for (auto nodeFromArg : nodesPointedByArgs)
     {
-        std::vector<std::pair<TR::Node *, TR::SymbolReference *>> heapKeysForArgNode = _tt->_in->getHeapKeysWithNode(nodeFromArg);
+        // instead of only the fields pointed by arg Obj currently present in heap, making obj -*-> as bottom
+        // this was inintial version
+        // std::vector<std::pair<TR::Node *, TR::SymbolReference *>> heapKeysForArgNode = _tt->_in->getHeapKeysWithNode(nodeFromArg);
+        //  now keep inserting this heapKeys into genPTG heap
+        //  actually only keys are needed, but for consistency also adding [key->set of nodes]
+        //  for (auto key : heapKeysForArgNode)
+        //  {
+        //      genPTG->setPointsToOfKeyInHeapToBottom(key);
+        //  }
+        // initial version ends here
 
-        // now keep inserting this heapKeys into genPTG heap
-        // actually only keys are needed, but for consistency also adding [key->set of nodes]
-        for (auto key : heapKeysForArgNode)
-        {
-            genPTG->setPointsToOfKeyInHeapToBottom(key);
-        }
+        TR::SymbolReference *starField = nullptr;
+        TR::Node *bottom = nullptr;
+        std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {nodeFromArg, starField};
+        genPTG->insertIntoHeap(NodeObjectField, bottom);
     }
     int lhsSlot = getAutoSlotIfNonVoidReturn(_tt->getNode());
-    std::cout<<"lhs slot for call "<<lhsSlot <<"\n";
-    if(lhsSlot){
-        //there is a non void return
+    std::cout << "lhs slot for call " << lhsSlot << "\n";
+    if (lhsSlot)
+    {
+        // there is a non void return
         genPTG->setPointsToOfKeyInStackToBottom(lhsSlot);
-
     }
     std::cout << "genPTG after CallStmt processed is \n";
     genPTG->printStack();
@@ -105,15 +112,15 @@ PTG *CallStmt::Kill()
         }
     }
     int lhsSlot = getAutoSlotIfNonVoidReturn(_tt->getNode());
-    if(lhsSlot){        //there is a non void return
-
+    if (lhsSlot)
+    { // there is a non void return
 
         std::set<TR::Node *> nodeSet = _tt->_in->getNodeSetForKeyInStack(lhsSlot);
         for (auto node : nodeSet)
-            {
-                // actualy only key is required, but just adding to create PTG
-                killPTG->insertIntoStack(lhsSlot, node);
-            }
+        {
+            // actualy only key is required, but just adding to create PTG
+            killPTG->insertIntoStack(lhsSlot, node);
+        }
     }
     std::cout << "KillPTG after CallStmt processed is \n";
     killPTG->printStack();
@@ -144,19 +151,18 @@ PTG *CallStmt::SetDiff(PTG *kill)
         }
     }
 
-
-
-    std::map<int, std::set<TR::Node*>>::iterator sit;
+    std::map<int, std::set<TR::Node *>>::iterator sit;
     // std::set<TR::Node*>::iterator nodeIt;
     for (sit = kill->_stack.begin(); sit != kill->_stack.end(); ++sit)
+    {
+        std::map<int, std::set<TR::Node *>>::iterator skeyFoundIt;
+        skeyFoundIt = copyIn->_stack.find(sit->first);
+        if (skeyFoundIt != copyIn->_stack.end())
         {
-            std::map<int, std::set<TR::Node*>>::iterator skeyFoundIt;
-            skeyFoundIt = copyIn->_stack.find(sit->first);
-            if(skeyFoundIt != copyIn->_stack.end()){
-                // cout<<"remove " <<it->first <<"?\n";
-                copyIn->_stack.erase(skeyFoundIt);
-            }
+            // cout<<"remove " <<it->first <<"?\n";
+            copyIn->_stack.erase(skeyFoundIt);
         }
+    }
     return copyIn;
 }
 
@@ -169,22 +175,22 @@ PTG *CallStmt::SetUnion(PTG *filteredSet, PTG *newSet)
     out->_heap = filteredSet->_heap;
     std::map<std::pair<TR::Node *, TR::SymbolReference *>, std::set<TR::Node *>>::iterator it;
     std::set<TR::Node *>::iterator nodeIt;
-    std::pair<TR::Node *,TR::SymbolReference*> objectFieldPair;
+    std::pair<TR::Node *, TR::SymbolReference *> objectFieldPair;
     std::set<TR::Node *> nodes;
     for (it = newSet->_heap.begin(); it != newSet->_heap.end(); ++it)
-        {
-            objectFieldPair = it->first;
-            nodes = it->second;
-                    
-            
-            // out->_heap.insert(std::pair<std::pair<TR::Node *, TR::SymbolReference *>, std::set<TR::Node *>>(objectFieldPair,nodes));
-            for(auto node : nodes){
-                out->insertIntoHeap(objectFieldPair,node);
-            }
-        }
+    {
+        objectFieldPair = it->first;
+        nodes = it->second;
 
-    std::map<int, std::set<TR::Node*>>::iterator sit;
-    std::set<TR::Node*>::iterator nodeSIt;
+        // out->_heap.insert(std::pair<std::pair<TR::Node *, TR::SymbolReference *>, std::set<TR::Node *>>(objectFieldPair,nodes));
+        for (auto node : nodes)
+        {
+            out->insertIntoHeap(objectFieldPair, node);
+        }
+    }
+
+    std::map<int, std::set<TR::Node *>>::iterator sit;
+    std::set<TR::Node *>::iterator nodeSIt;
     std::set<TR::Node *> snodes;
     int autoSlot;
     for (sit = newSet->_stack.begin(); sit != newSet->_stack.end(); ++sit)
@@ -193,7 +199,7 @@ PTG *CallStmt::SetUnion(PTG *filteredSet, PTG *newSet)
         snodes = sit->second;
         for (auto node : snodes)
         {
-            out->insertIntoStack(autoSlot,node);
+            out->insertIntoStack(autoSlot, node);
         }
     }
     // out->printStack();
@@ -366,7 +372,7 @@ int CallStmt::getArgumentAuto(TR::Node *argNode)
             }
         }
     }
-    return 0; //maybe this 0 can be used for "this"??if yes change this return value
+    return 0; // maybe this 0 can be used for "this"??if yes change this return value
 }
 
 int CallStmt::getAutoSlotIfNonVoidReturn(TR::Node *node)
@@ -385,6 +391,5 @@ int CallStmt::getAutoSlotIfNonVoidReturn(TR::Node *node)
             }
         }
     }
-    return 0;//maybe this 0 can be used for "this"??if yes change this return value
-
+    return 0; // maybe this 0 can be used for "this"??if yes change this return value
 }
