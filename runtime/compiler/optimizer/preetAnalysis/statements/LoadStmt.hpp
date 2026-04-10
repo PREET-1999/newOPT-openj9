@@ -6,7 +6,7 @@
 class LoadStmt : public Statement {
 
 public:
-    LoadStmt(TR::TreeTop *tt);
+    LoadStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo);
 
    
     // Override Gen()

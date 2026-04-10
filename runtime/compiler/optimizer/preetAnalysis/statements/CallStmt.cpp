@@ -34,9 +34,10 @@ void printMethodCallKind(MethodCallKind kind)
 {
     std::cout << toString(kind) << std::endl;
 }
-CallStmt::CallStmt(TR::TreeTop *tt)
+CallStmt::CallStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
 {
     _tt = tt;
+    _stmtInfo = stmtInfo;
 }
 
 PTG *CallStmt::Gen()

@@ -87,6 +87,7 @@ j9jit_files(
 	optimizer/preetAnalysis/statements/CopyStmt.cpp
 	optimizer/preetAnalysis/statements/CallStmt.cpp
 	optimizer/preetAnalysis/statements/UnknownStmt.cpp
+	optimizer/preetAnalysis/StatementInfoTable.cpp
 
 
 

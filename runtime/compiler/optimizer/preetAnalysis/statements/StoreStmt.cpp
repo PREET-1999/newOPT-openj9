@@ -5,10 +5,11 @@
 #include <iostream>
 #include <bits/stdc++.h>
 #include "il/SymbolReference.hpp"
-
-StoreStmt::StoreStmt(TR::TreeTop *tt)
+#include "optimizer/preetAnalysis/StatementInfoTable.hpp"
+StoreStmt::StoreStmt(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
 {
     _tt = tt;
+    _stmtInfo = stmtInfo;
 }
 
 PTG *StoreStmt::Gen()
@@ -32,27 +33,96 @@ PTG *StoreStmt::Gen()
         return genPTG;
     }
 
-std::set<TR::Node *> nodeSetOfLhs = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
+    std::set<TR::Node *> nodeSetOfLhs = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
     for (auto node : nodeSetOfLhs)
     {
         if (_tt->_in->doesStarFieldFromNodeExists(node))
         {
-            //no need to add anything to heap and no further processing
+            // no need to add anything to heap and no further processing
             return genPTG;
         }
     }
 
-
-
-
-
-
-
-
-    // inserting into heap [baseNode,f]={storedNode}
-    for (auto a : baseNode)
+    std::vector<TR::Node *> fromNodes;
+    std::cout << "lhs fieldStack [\n";
+    for (auto field : _stmtInfo->lhsFieldStack)
     {
-        for (auto b : storedNode)
+        int32_t index = field->getCPIndex();
+        std::cout << index << " ";
+    }
+    std::cout << "]\n";
+    for (auto node : baseNode)
+    {
+        if (_stmtInfo->lhsFieldStack.size() == 1)
+        {
+            fromNodes.push_back(node);
+        }
+        else
+        {
+            _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
+        }
+    }
+
+    std::cout << "a.f..f ki isse -> jayega ->  [ ";
+    for (auto node : fromNodes)
+    {
+        std::cout << node << " ";
+    }
+    std::cout << "]\n";
+
+    // check if bottom is present, if yes no further processing needed
+    for (auto node : fromNodes)
+    {
+        if (node == nullptr) // can you have a routine isBOttom rather than direct nullptr
+            return genPTG;
+    }
+
+    std::vector<TR::Node *> toNodes;
+    std::cout << "rhs fieldStack [\n";
+    for (auto field : _stmtInfo->rhsFieldStack)
+    {
+        int32_t index = field->getCPIndex();
+        std::cout << index << " ";
+    }
+    std::cout << "]\n";
+    for (auto node : storedNode)
+    {
+        if (_stmtInfo->rhsFieldStack.size() == 0)
+        {
+            toNodes.push_back(node);
+        }
+        else
+        {
+            _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
+        }
+    }
+
+    // check if bottom is present, if yes "fromNode".f -> _|_
+    for (auto node : toNodes)
+    {
+
+        if (node == nullptr)
+        {
+            TR::Node *bottom = nullptr;
+            for (auto fromNode : fromNodes)
+            {
+                std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
+                genPTG->insertIntoHeap(NodeObjectField, bottom);
+            }
+            return genPTG;
+        }
+    }
+
+    std::cout << "a.f..f ki ispe -> aaayega ->  [ ";
+    for (auto node : toNodes)
+    {
+        std::cout << node << " ";
+    }
+    std::cout << "]\n";
+    // inserting into heap [fronMode,f]={toNode}
+    for (auto a : fromNodes)
+    {
+        for (auto b : toNodes)
         {
             /*
                 SymbolReference* f = new SymbolReference("f");
@@ -79,24 +149,56 @@ PTG *StoreStmt::Kill()
 
     PTG *killPTG = new PTG();
 
-    int rhsAuto = getrhsAuto();
-    bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
+    std::set<TR::Node *> storedNode = getNodeToBeStoredIntoBase();
+    std::vector<TR::Node *> toNodes;
+    for (auto node : storedNode)
+    {
+        if (_stmtInfo->rhsFieldStack.size() == 0)
+        {
+            toNodes.push_back(node);
+        }
+        else
+        {
+            _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
+        }
+    }
+    bool isObjPointedByRhsBottom = false;
+    for (auto node : toNodes)
+    {
+
+        if (node == nullptr)
+        {
+            isObjPointedByRhsBottom = true;
+        }
+    }
     if (isObjPointedByRhsBottom)
     {
         // kill previous as anyways bottom will be added
         std::set<TR::Node *> baseNodes = getNodePointedByBase();
+        std::vector<TR::Node *> fromNodes;
+        for (auto node : baseNodes)
+        {
+            if (_stmtInfo->lhsFieldStack.size() == 1)
+            {
+                fromNodes.push_back(node);
+            }
+            else
+            {
+                _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
+            }
+        }
         TR::SymbolReference *f = getSymRef();
-        for (auto baseNode : baseNodes)
+        for (auto fromNode : fromNodes)
         {
 
-            std::set<TR::Node *> nodeSet = _tt->_in->getNodeSetForKeyInHeap(std::pair<TR::Node *, TR::SymbolReference *>{baseNode, f});
+            std::set<TR::Node *> nodeSet = _tt->_in->getNodeSetForKeyInHeap(std::pair<TR::Node *, TR::SymbolReference *>{fromNode, f});
             for (auto node : nodeSet)
             {
-                killPTG->insertIntoHeap(std::pair<TR::Node *, TR::SymbolReference *>{baseNode, f}, node);
+                killPTG->insertIntoHeap(std::pair<TR::Node *, TR::SymbolReference *>{fromNode, f}, node);
             }
         }
     }
-    std::cout<<"[StoreStmt] Kill\n";
+    std::cout << "[StoreStmt] Kill\n";
     killPTG->printHeap();
     return killPTG;
 }
@@ -160,8 +262,13 @@ PTG *StoreStmt::SetUnion(PTG *filteredSet, PTG *newSet)
 std::set<TR::Node *> StoreStmt::getNodePointedByBase()
 {
     std::set<TR::Node *> nodes; // a.f =b   a->{0xab , ...}
-    int lhsAuto = getlhsAuto();
+    int lhsAuto = _stmtInfo->lhsAuto;
     nodes = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
+
+    // this works for basic a.f node
+    //  std::set<TR::Node *> nodes; // a.f =b   a->{0xab , ...}
+    //  int lhsAuto = getlhsAuto();
+    //  nodes = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
 
     // TR::Node *node = _tt->getNode();
     // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
@@ -190,9 +297,15 @@ std::set<TR::Node *> StoreStmt::getNodePointedByBase()
 
 std::set<TR::Node *> StoreStmt::getNodeToBeStoredIntoBase()
 {
+
     std::set<TR::Node *> nodes; // a.f=b   b->{0xab , ...}
-    int rhsAuto = getrhsAuto();
+    int rhsAuto = _stmtInfo->rhsAuto;
     nodes = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
+
+    // this works for basic a.f=b
+    //  std::set<TR::Node *> nodes; // a.f=b   b->{0xab , ...}
+    //  int rhsAuto = getrhsAuto();
+    //  nodes = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
 
     // TR::Node *node = _tt->getNode();
     // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
@@ -222,19 +335,23 @@ std::set<TR::Node *> StoreStmt::getNodeToBeStoredIntoBase()
     return nodes;
 }
 
+// this should return symRef from "base" (NOT just the first child)
 TR::SymbolReference *StoreStmt::getSymRef()
 {
     TR::SymbolReference *symRef = nullptr;
+    int lhsStackFieldLength = _stmtInfo->lhsFieldStack.size();
+    symRef = _stmtInfo->lhsFieldStack[lhsStackFieldLength - 1];
 
-    TR::Node *node = _tt->getNode();
-    TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
-    if (firstChildNode)                               // the awrtbari
-    {
-        symRef = firstChildNode->getSymbolReference();
-        int32_t index = symRef->getCPIndex();
-        std::cout << "(store)symRef " << symRef << "\n";
-        std::cout << "index " << index << "\n";
-    }
+    // works for basic a.f=b;
+    //  TR::Node *node = _tt->getNode();
+    //  TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    //  if (firstChildNode)                               // the awrtbari
+    //  {
+    //      symRef = firstChildNode->getSymbolReference();
+    //      int32_t index = symRef->getCPIndex();
+    //      std::cout << "(store)symRef " << symRef << "\n";
+    //      std::cout << "index " << index << "\n";
+    //  }
 
     return symRef;
 }

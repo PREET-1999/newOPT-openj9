@@ -8,9 +8,10 @@
 #include "il/SymbolReference.hpp"
 
 // using namespace std;
-ObjectAllocationStmt::ObjectAllocationStmt(TR::TreeTop *tt)
+ObjectAllocationStmt::ObjectAllocationStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
 {
     _tt = tt;
+    _stmtInfo=stmtInfo;
 }
 
 int ObjectAllocationStmt::getAuto()

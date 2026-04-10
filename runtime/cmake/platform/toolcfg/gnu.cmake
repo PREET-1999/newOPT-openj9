@@ -22,7 +22,7 @@
 #preet changed from -O3 to -O0
 list(APPEND OMR_PLATFORM_COMPILE_OPTIONS -O0 -g -fstack-protector)
 
-list(APPEND OMR_PLATFORM_COMPILE_OPTIONS -O3 -g -fstack-protector)
+#list(APPEND OMR_PLATFORM_COMPILE_OPTIONS -O3 -g -fstack-protector)
 if(OMR_DDR AND NOT (CMAKE_C_COMPILER_VERSION VERSION_LESS 11))
 	# In gcc 11+ the default is to use DWARF version 5 which is not yet
 	# supported by ddrgen: tell the compiler to use DWARF version 4.

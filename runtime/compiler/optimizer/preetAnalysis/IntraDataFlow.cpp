@@ -40,25 +40,268 @@
 // #include "PTG.h"
 #include <iostream>
 #include "IntraDataFlow.hpp"
+#include "StatementInfoTable.hpp"
 using namespace std;
-StatementKind IntraDataFlow::findTreeTopType(TR::TreeTop *tt)
-{
-    // trivially checking for each kind
 
-    if (checkIfNewStmt(tt))
-        return StatementKind::AllocationStmt;
-    if (checkIfStoreStmt(tt))
-        return StatementKind::FieldStoreStmt;
-    if (checkIfLoadStmt(tt))
-        return StatementKind::FieldLoadStmt;
-    if (checkIfCopyStmt(tt))
-        return StatementKind::CopyStmt;
+void IntraDataFlow::nodeDFS(TR::Node *node, StatementInfoTable *stmtInfo, bool forLhs)
+{
+    // std::cout << "processing node " << node << "\n";
+    // if (globalNodeMap[node->getGlobalIndex()])
+    // {
+    //     std::cout << "Ive already processed node " << node << "\n";
+    //     return;
+    // }
+
+    // // for (int32_t i = 0; i < node->getNumChildren(); i++)
+    // // {
+    // // This wrongly goes to explore chains even for unintended opcodes(eg calli)
+    // TR::Node *child = node->getChild(0);
+    // if (child)
+    //     nodeDFS(child, stmtInfo, forLhs);
+    // // }
+
+    // the fix to only explore further the nodes whose opcode is of interest
+    TR::Node *child = node->getChild(0);
+    if (child && (child->getOpCodeValue() == TR::aload || child->getOpCodeValue() == TR::aloadi || child->getOpCodeValue() == TR::New))
+    {
+        std::cout << "from nodeDFS(" << node << ") calling nodeDFS(" << child << ")\n";
+        nodeDFS(child, stmtInfo, forLhs);
+    }
+    else
+    {
+        if (child)
+        {
+            std::cout << "nodeDFS mein aage nodeDFS call nai huaa for node " << node << "\n";
+        }
+    }
+    switch (node->getOpCodeValue())
+    {
+    case TR::aload:
+    {
+        TR::SymbolReference *symRef = node->getSymbolReference();
+        TR::Symbol *sym = symRef->getSymbol();
+        if (sym->getKind() == TR::Symbol::IsAutomatic)
+        {
+            int32_t slot = symRef->getCPIndex();
+            std::cout << "(" << slot << ")";
+
+            if (forLhs)
+            {
+                stmtInfo->setLHSAuto(slot);
+            }
+            else
+            {
+                stmtInfo->setRHSAuto(slot);
+            }
+        }
+        break;
+    }
+    case TR::aloadi:
+    {
+        TR::SymbolReference *symRef = node->getSymbolReference();
+        int32_t index = symRef->getCPIndex();
+        std::cout << "." << index << "";
+
+        if (forLhs)
+        {
+            stmtInfo->pushLHSField(symRef); // probably I need a queue :)...
+        }
+        else
+        {
+            stmtInfo->pushRHSField(symRef);
+        }
+
+        break;
+    }
+    case TR::New:
+    {
+        std::cout << "new ()";
+        if (forLhs)
+        {
+            stmtInfo->setLHSNewNode(node); // probably I need a queue :)...
+        }
+        else
+        {
+            stmtInfo->setRHSNewNode(node);
+        }
+
+        break;
+    }
+    }
+
+    // std::cout << "stored " << node << "\n";
+    // globalNodeMap[node->getGlobalIndex()] = 1;
+}
+// in process of building generic findTreeTop
+void IntraDataFlow::shoutOutLoud(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
+{
+    TR::Node *node = tt->getNode();
+    // only processing forms a = [] | [].f=[]
+    switch (node->getOpCodeValue())
+    {
+    case TR::astore:
+    {
+        // for (int32_t i = 0; i < node->getNumChildren(); i++)
+        // {
+        TR::Node *child = node->getChild(0);
+        if (child && (child->getOpCodeValue() == TR::aload || child->getOpCodeValue() == TR::aloadi || child->getOpCodeValue() == TR::New))
+        {
+            std::cout << "\n---------------------------------------\n";
+            TR::SymbolReference *symRef = node->getSymbolReference();
+            TR::Symbol *sym = symRef->getSymbol();
+            if (sym->getKind() == TR::Symbol::IsAutomatic)
+            {
+                int32_t slot = symRef->getCPIndex();
+                std::cout << "(" << slot << ") = ";
+                stmtInfo->setLHSAuto(slot);
+            }
+            nodeDFS(child, stmtInfo, false);
+
+            stmtInfo->printStatementInfo();
+        }
+
+        // }
+        break;
+    };
+    case TR::ResolveAndNULLCHK:
+    {
+        TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+        if (firstChildNode)
+        {
+            if (firstChildNode->getOpCode().isStoreIndirect()) // awrtbari
+            {
+                // for (int32_t i = 0; i < firstChildNode->getNumChildren(); i++)
+                // {
+                std::cout << "\n---------------------------------------\n";
+                TR::Node *lhsChild = firstChildNode->getChild(0);
+                if (lhsChild)
+                    nodeDFS(lhsChild, stmtInfo, true);
+
+                // this awrbari's .f
+                TR::SymbolReference *symRef = firstChildNode->getSymbolReference();
+                int32_t index = symRef->getCPIndex();
+                std::cout << "." << index << "";
+                stmtInfo->pushLHSField(symRef);
+
+                std::cout << " = ";
+                TR::Node *rhsChild = firstChildNode->getChild(1);
+                if (rhsChild)
+                    nodeDFS(rhsChild, stmtInfo, false);
+                // }
+
+                stmtInfo->printStatementInfo();
+            }
+        }
+        break;
+    };
+    default:
+    {
+    }
+    }
+}
+IntraDataFlow::IntraDataFlow(TR::Compilation *comp)
+{
+    _comp = comp;
+}
+std::pair<StatementKind, StatementInfoTable *>
+IntraDataFlow::findTreeTopType(TR::TreeTop *tt)
+{
+    StatementInfoTable *currentStmtInfo = new StatementInfoTable();
+
+    // see if I can get the .f.f.f.f's working
+    shoutOutLoud(tt, currentStmtInfo);
+
+    // once I have the statmentInfo instance populated for a "relevant stmt"
+    // lets filter statement types based on that
+    if (checkIfNewStmtViaStmtInfo(tt, currentStmtInfo))
+    {
+        std::cout << tt->getNode() << " is AllocationStmt\n";
+        return {StatementKind::AllocationStmt, currentStmtInfo};
+    }
+    if (checkIfStoreStmtViaStmtInfo(tt, currentStmtInfo))
+    {
+        std::cout << tt->getNode() << " is FieldStoreStmt\n";
+        return {StatementKind::FieldStoreStmt, currentStmtInfo};
+    }
+    if (checkIfLoadStmtViaStmtInfo(tt, currentStmtInfo))
+    {
+        std::cout << tt->getNode() << " is FieldLoadStmt\n";
+        return {StatementKind::FieldLoadStmt, currentStmtInfo};
+    }
+    if (checkIfCopyStmtViaStmtInfo(tt, currentStmtInfo))
+    {
+        std::cout << tt->getNode() << " is CopyStmt\n";
+        return {StatementKind::CopyStmt, currentStmtInfo};
+    }
+    if (checkIfCallStmtViaStmtInfo(tt, currentStmtInfo))
+    {
+        std::cout << tt->getNode() << " is CallStmt\n";
+        return {StatementKind::CallStmt, currentStmtInfo};
+    }
+
+    // trivially checking for each kind
+    // if (checkIfNewStmt(tt))
+    //     return StatementKind::AllocationStmt;
+    // if (checkIfStoreStmt(tt))
+    //     return StatementKind::FieldStoreStmt;
+    // if (checkIfLoadStmt(tt))
+    //     return StatementKind::FieldLoadStmt;
+    // if (checkIfCopyStmt(tt))
+    //     return StatementKind::CopyStmt;
     if (checkIfCallStmt(tt))
-        return StatementKind::CallStmt;
+        return {StatementKind::CallStmt, currentStmtInfo};
 
     // to do other statemnts....
 
-    return StatementKind::YetToDecideStmt;
+    return {StatementKind::YetToDecideStmt, currentStmtInfo};
+}
+
+bool IntraDataFlow::checkIfNewStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
+{
+    return (stmtInfo->lhsAuto != -1) &&         // LHS is a variable
+           (!stmtInfo->hasLHSFields()) &&       // no LHS field chain
+           (stmtInfo->rhsNewNode != nullptr) && // RHS is a new
+           (!stmtInfo->hasRHSFields());         // no RHS field chain
+}
+
+bool IntraDataFlow::checkIfStoreStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
+{
+    bool lhsValid = (stmtInfo->lhsAuto != -1) &&
+                    (stmtInfo->hasLHSFields());
+
+    bool rhsValid = (stmtInfo->rhsNewNode != nullptr) ||
+                    (stmtInfo->rhsAuto != -1);
+
+    return lhsValid && rhsValid;
+}
+
+bool IntraDataFlow::checkIfLoadStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
+{ // for now not hanling a=(new Node()).f...do I want to handle such??
+    bool lhsValid = (stmtInfo->lhsAuto != -1) &&
+                    (!stmtInfo->hasLHSFields());
+
+    bool rhsValid = (stmtInfo->rhsAuto != -1) &&
+                    (stmtInfo->hasRHSFields());
+
+    return lhsValid && rhsValid;
+}
+
+bool IntraDataFlow::checkIfCopyStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
+{
+    bool lhsValid = (stmtInfo->lhsAuto != -1) &&
+                    (!stmtInfo->hasLHSFields()) &&
+                    (stmtInfo->lhsNewNode == nullptr);
+
+    bool rhsValid = (stmtInfo->rhsAuto != -1) &&
+                    (!stmtInfo->hasRHSFields()) &&
+                    (stmtInfo->rhsNewNode == nullptr);
+
+    return lhsValid && rhsValid;
+}
+
+bool IntraDataFlow::checkIfCallStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
+{
+    return false;
 }
 
 bool IntraDataFlow::checkIfNewStmt(TR::TreeTop *tt)
@@ -437,6 +680,19 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
 
     TR::Block *block = tt->getNode()->getBlock();
 
+    // dummy (uncomment if you want to test specific calls without testing all kind of stmts)
+    // for (TR::TreeTop *treeTop = block->getEntry();
+    //      treeTop != block->getExit()->getNextTreeTop();
+    //      treeTop = treeTop->getNextTreeTop())
+    // {
+    //     TR::Node *node = treeTop->getNode();
+    //     // std::cout << "analysing node " << node << std::endl;
+
+    //     // std::cout << "analysing node " << treeTop->getNode() << std::endl;
+    //     StatementKind sk = findTreeTopType(treeTop);
+    // }
+
+    // actual one, uncomment this after dumy test done
     for (TR::TreeTop *treeTop = block->getEntry();
          treeTop != block->getExit()->getNextTreeTop();
          treeTop = treeTop->getNextTreeTop())
@@ -445,7 +701,10 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         std::cout << "analysing node " << node << std::endl;
 
         // std::cout << "analysing node " << treeTop->getNode() << std::endl;
-        StatementKind sk = findTreeTopType(treeTop);
+
+        std::pair<StatementKind, StatementInfoTable *> result = findTreeTopType(treeTop);
+        StatementKind sk = result.first;
+        StatementInfoTable *stmtInfo = result.second;
 
         if (predTreeTop) // first treetop's in shouldnt be changed
             treeTop->_in = computeInSetFromPredecessor(predTreeTop);
@@ -460,7 +719,7 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         {
         case StatementKind::AllocationStmt:
         {
-            Statement *st = new ObjectAllocationStmt(treeTop);
+            Statement *st = new ObjectAllocationStmt(treeTop, stmtInfo);
             PTG *gen = st->Gen();
             PTG *kill = st->Kill();
 
@@ -474,7 +733,7 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         };
         case StatementKind::FieldStoreStmt:
         {
-            Statement *st = new StoreStmt(treeTop);
+            Statement *st = new StoreStmt(treeTop, stmtInfo);
             PTG *gen = st->Gen();
             PTG *kill = st->Kill();
 
@@ -488,7 +747,7 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         };
         case StatementKind::FieldLoadStmt:
         {
-            Statement *st = new LoadStmt(treeTop);
+            Statement *st = new LoadStmt(treeTop, stmtInfo);
             PTG *gen = st->Gen();
             PTG *kill = st->Kill();
 
@@ -502,7 +761,7 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         }
         case StatementKind::CopyStmt:
         {
-            Statement *st = new CopyStmt(treeTop);
+            Statement *st = new CopyStmt(treeTop, stmtInfo);
             PTG *gen = st->Gen();
             PTG *kill = st->Kill();
 
@@ -514,10 +773,10 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
 
             break;
         }
-        case StatementKind::CallStmt:              //for call stmt, a combined transfer flow might reduce computations...do we do that??
+        case StatementKind::CallStmt: // for call stmt, a combined transfer flow might reduce computations...do we do that??
 
         {
-            Statement *st = new CallStmt(treeTop);
+            Statement *st = new CallStmt(treeTop, stmtInfo);
             PTG *gen = st->Gen();
             PTG *kill = st->Kill();
 
@@ -533,7 +792,7 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         case StatementKind::YetToDecideStmt:
         {
             // as of now just flow the in to the out for such unhandled cases
-            Statement *st = new UnknownStmt(treeTop);
+            Statement *st = new UnknownStmt(treeTop, stmtInfo);
             PTG *gen = st->Gen();
             PTG *kill = st->Kill();
 

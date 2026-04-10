@@ -6,7 +6,7 @@
 class ObjectAllocationStmt : public Statement {
 
 public:
-    ObjectAllocationStmt(TR::TreeTop *tt);
+    ObjectAllocationStmt(TR::TreeTop *tt,StatementInfoTable *stmtInfo);
 
     //function to get the slot for lhs auto variable 
     int getAuto();

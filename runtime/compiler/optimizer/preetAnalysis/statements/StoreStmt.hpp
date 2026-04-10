@@ -6,7 +6,7 @@
 class StoreStmt : public Statement {
 
 public:
-    StoreStmt(TR::TreeTop *tt);
+    StoreStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo);
 
    
     // Override Gen()

@@ -6,7 +6,7 @@
 class CopyStmt : public Statement {
 
 public:
-    CopyStmt(TR::TreeTop *tt);
+    CopyStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo);
 
    
     // Override Gen()

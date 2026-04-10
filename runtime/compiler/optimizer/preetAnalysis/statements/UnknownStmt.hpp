@@ -6,7 +6,7 @@
 class UnknownStmt : public Statement {
 
 public:
-    UnknownStmt(TR::TreeTop *tt);
+    UnknownStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo);
 
    
     // Override Gen()

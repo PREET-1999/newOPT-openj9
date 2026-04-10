@@ -293,7 +293,7 @@ int32_t TR_PreetOptimization::perform()
         // IntraDataFlow *idf = new IntraDataFlow();
         // idf->performAnalysis(head,comp());
         
-        IntraDataFlow *cfgIdf = new IntraDataFlow();
+        IntraDataFlow *cfgIdf = new IntraDataFlow(comp());
         cfgIdf->performAnalysisOverCFG(comp());
 
 

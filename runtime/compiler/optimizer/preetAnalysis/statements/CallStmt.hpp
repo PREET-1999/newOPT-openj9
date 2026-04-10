@@ -4,10 +4,11 @@
 #include "optimizer/preetAnalysis/statements/Statement.hpp"
 #include <vector>
 enum class MethodCallKind;
+class StatementInfo;
 class CallStmt : public Statement {
 
 public:
-    CallStmt(TR::TreeTop *tt);
+    CallStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo);
 
    
     // Override Gen()

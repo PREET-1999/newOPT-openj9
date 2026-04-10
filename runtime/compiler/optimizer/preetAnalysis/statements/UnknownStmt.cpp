@@ -1,8 +1,8 @@
 #include "UnknownStmt.hpp"
-
-UnknownStmt::UnknownStmt(TR::TreeTop *tt)
+UnknownStmt::UnknownStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
 {
     _tt = tt;
+    _stmtInfo = stmtInfo;
 }
 
 PTG *UnknownStmt::Gen()

@@ -5,9 +5,11 @@
 #include "il/Node_inlines.hpp"
 #include <bits/stdc++.h>
 #include "il/SymbolReference.hpp"
-LoadStmt::LoadStmt(TR::TreeTop *tt)
+#include "optimizer/preetAnalysis/StatementInfoTable.hpp"
+LoadStmt::LoadStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
 {
     _tt = tt;
+    _stmtInfo = stmtInfo;
 }
 
 PTG *LoadStmt::Gen()
@@ -48,21 +50,34 @@ PTG *LoadStmt::Gen()
 
     // std::set<TR::Node*> objsOfBase = _tt->_in->getNodeSetForKeyInStack(base);
     std::set<TR::Node *> objsOfBase = getNodePointedByBase();
+        std::vector<TR::Node *> toNodes;
 
-    TR::SymbolReference* symref = getSymRef();
-    std::cout << "load " << symref << "\n";
     for (auto node : objsOfBase)
     {
-        // cout<<"node" <<node->_id <<"\n";
-
-        // for this node , find the nodes pointed to by its f(symRef) field
-        std::set<TR::Node *> nodeSet = _tt->_in->getNodeSetForKeyInHeap(std::pair<TR::Node *, TR::SymbolReference *>{node, symref});
-        for (auto heapNode : nodeSet)
+        if (_stmtInfo->rhsFieldStack.size() == 0)
         {
-            // cout<<"O" <<heapNode->_id <<" ";
-            genPTG->insertIntoStack(lhsAuto, heapNode);
+            toNodes.push_back(node);
         }
-        std::cout << "\n";
+        else
+        {
+            _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
+        }
+    }
+
+    //if to Nodes has bottom , point lhs to bottom
+    for(auto node :toNodes){
+        if(node == nullptr){
+            TR::Node *bottom = nullptr;
+            genPTG->insertIntoStack(lhsAuto, bottom);
+            return genPTG;
+        }
+    }
+    TR::SymbolReference* symref = getSymRef();
+    std::cout << "load " << symref << "\n";
+    for (auto node : toNodes)
+    {
+        
+            genPTG->insertIntoStack(lhsAuto, node);
     }
     genPTG->printStack();
     genPTG->printHeap();
@@ -169,63 +184,70 @@ std::set<TR::Node *> LoadStmt::getNodePointedByBase()
     // }
     return nodes;
 }
+// this should return symRef from "base" (NOT just the first child)
 
 TR::SymbolReference *LoadStmt::getSymRef()
 {
     TR::SymbolReference *symRef = nullptr;
+    int rhsStackFieldLength = _stmtInfo->rhsFieldStack.size();
+    symRef = _stmtInfo->rhsFieldStack[rhsStackFieldLength - 1];
 
-    TR::Node *node = _tt->getNode();
-    TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
-    if (firstChildNode)                               // the aloadi
-    {
-        symRef = firstChildNode->getSymbolReference();
-        int32_t index = symRef->getCPIndex();
-        std::cout << "(load)symRef " << symRef << "\n";
-        std::cout << "index " << index << "\n";
-    }
+    //works for basic a = b.f
+    // TR::Node *node = _tt->getNode();
+    // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    // if (firstChildNode)                               // the aloadi
+    // {
+    //     symRef = firstChildNode->getSymbolReference();
+    //     int32_t index = symRef->getCPIndex();
+    //     std::cout << "(load)symRef " << symRef << "\n";
+    //     std::cout << "index " << index << "\n";
+    // }
 
     return symRef;
 }
 
 int LoadStmt::getlhsAuto()
 {
-    TR::Node *node = _tt->getNode();
-    if (node->getOpCodeValue() == TR::astore)
-    {
-        if (node->getOpCode().hasSymbolReference() && node->getSymbolReference())
-        {
-            TR::SymbolReference *symRef = node->getSymbolReference();
-            TR::Symbol *sym = symRef->getSymbol();
-            if (sym->getKind() == TR::Symbol::IsAutomatic)
-            {
-                int32_t slot = symRef->getCPIndex();
-                std::cout << "(load Lhs)slot is " << slot << "\n";
-                return slot;
-            }
-        }
-    }
-    return -1;
+    return _stmtInfo->lhsAuto;
+    // TR::Node *node = _tt->getNode();
+    // if (node->getOpCodeValue() == TR::astore)
+    // {
+    //     if (node->getOpCode().hasSymbolReference() && node->getSymbolReference())
+    //     {
+    //         TR::SymbolReference *symRef = node->getSymbolReference();
+    //         TR::Symbol *sym = symRef->getSymbol();
+    //         if (sym->getKind() == TR::Symbol::IsAutomatic)
+    //         {
+    //             int32_t slot = symRef->getCPIndex();
+    //             std::cout << "(load Lhs)slot is " << slot << "\n";
+    //             return slot;
+    //         }
+    //     }
+    // }
+    // return -1;
 }
 
 int LoadStmt::getrhsAuto()
 {
-    TR::Node *node = _tt->getNode();
-    TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
-    if (firstChildNode)
-    {
-        TR::Node *storeNode = firstChildNode;
-        TR::Node *baseNode = storeNode->getFirstChild(); // base Node of store stmt
-        if (baseNode->getOpCode().hasSymbolReference() && baseNode->getSymbolReference())
-        {
-            TR::SymbolReference *symRef = baseNode->getSymbolReference();
-            TR::Symbol *sym = symRef->getSymbol();
-            if (sym->getKind() == TR::Symbol::IsAutomatic)
-            {
-                int32_t slot = symRef->getCPIndex();
-                std::cout << "(load Rhs)slot is " << slot << "\n";
-                return slot;
-            }
-        }
-    }
-    return -1;
+        return _stmtInfo->rhsAuto;
+
+    // TR::Node *node = _tt->getNode();
+    // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    // if (firstChildNode)
+    // {
+    //     TR::Node *storeNode = firstChildNode;
+    //     TR::Node *baseNode = storeNode->getFirstChild(); // base Node of store stmt
+    //     if (baseNode->getOpCode().hasSymbolReference() && baseNode->getSymbolReference())
+    //     {
+    //         TR::SymbolReference *symRef = baseNode->getSymbolReference();
+    //         TR::Symbol *sym = symRef->getSymbol();
+    //         if (sym->getKind() == TR::Symbol::IsAutomatic)
+    //         {
+    //             int32_t slot = symRef->getCPIndex();
+    //             std::cout << "(load Rhs)slot is " << slot << "\n";
+    //             return slot;
+    //         }
+    //     }
+    // }
+    // return -1;
 }

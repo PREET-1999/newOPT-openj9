@@ -5,9 +5,10 @@
 #include "il/Node_inlines.hpp"
 #include <bits/stdc++.h>
 #include "il/SymbolReference.hpp"
-CopyStmt::CopyStmt(TR::TreeTop *tt)
+CopyStmt::CopyStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
 {
     _tt = tt;
+    _stmtInfo = stmtInfo;
 }
 
 PTG *CopyStmt::Gen()
