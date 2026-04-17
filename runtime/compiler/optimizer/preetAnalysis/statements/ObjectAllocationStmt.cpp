@@ -24,6 +24,10 @@ int ObjectAllocationStmt::getAuto()
             TR::Symbol *sym = symRef->getSymbol();
             if( sym->getKind() == TR::Symbol::IsAutomatic){
                 int32_t slot = symRef->getCPIndex();
+
+                if(sym->isLocalObject())
+                     std::cout<<"<auto " <<symRef->getCPIndex() <<"> is local\n"; 
+
                 std::cout<<"slot is " <<slot <<"\n";
                 return slot;
             }

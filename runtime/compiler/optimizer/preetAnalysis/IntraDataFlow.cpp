@@ -7,6 +7,8 @@
 #include "optimizer/preetAnalysis/statements/CopyStmt.hpp"
 #include "optimizer/preetAnalysis/statements/CallStmt.hpp"
 #include "optimizer/preetAnalysis/statements/UnknownStmt.hpp"
+#include "optimizer/preetAnalysis/AuxillaryInfo.hpp"
+
 
 #include "codegen/CodeGenerator.hpp"
 #include "compile/Compilation.hpp"
@@ -216,6 +218,7 @@ IntraDataFlow::findTreeTopType(TR::TreeTop *tt)
     if (checkIfNewStmtViaStmtInfo(tt, currentStmtInfo))
     {
         std::cout << tt->getNode() << " is AllocationStmt\n";
+        AuxillaryInfo::localAllocations[tt->getNode()->getFirstChild()]=true;
         return {StatementKind::AllocationStmt, currentStmtInfo};
     }
     if (checkIfStoreStmtViaStmtInfo(tt, currentStmtInfo))
@@ -705,6 +708,8 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         std::pair<StatementKind, StatementInfoTable *> result = findTreeTopType(treeTop);
         StatementKind sk = result.first;
         StatementInfoTable *stmtInfo = result.second;
+
+
 
         if (predTreeTop) // first treetop's in shouldnt be changed
             treeTop->_in = computeInSetFromPredecessor(predTreeTop);

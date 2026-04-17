@@ -53,6 +53,8 @@
 #include "ras/Debug.hpp"
 #include "ras/Logger.hpp"
 #include "optimizer/preetAnalysis/IntraDataFlow.hpp"
+#include "optimizer/preetAnalysis/WalkOverTreeIL.hpp"
+#include "optimizer/preetAnalysis/AuxillaryInfo.hpp"
 
 // preet
 #include <iostream>
@@ -216,43 +218,80 @@ bool TR_PreetOptimization::checkIfCallStmt(TR::TreeTop *tt)
 {
     TR::Node *node = tt->getNode();
 
-    //since the call could be a child of some NULLCHeck or some other opcode....
-    if (node->getOpCode().isCall() || (node->getNumChildren() > 0 &&  node->getFirstChild()->getOpCode().isCall())){
+    // since the call could be a child of some NULLCHeck or some other opcode....
+    if (node->getOpCode().isCall() || (node->getNumChildren() > 0 && node->getFirstChild()->getOpCode().isCall()))
+    {
         return true;
     }
     return false;
 }
 
-void printCFGNode(TR::CFGNode *cfgNode){
-    TR::Block *block = (TR::Block*)cfgNode;
-    std::cout<<"block No" <<block->getNumber() <<std::endl;
-    std::cout<<"block name " <<block <<std::endl;
-    if(!block->getEntry()){
-        std::cout<<"Entry | Exit block\n" <<std::endl;
+void printCFGNode(TR::CFGNode *cfgNode)
+{
+    TR::Block *block = (TR::Block *)cfgNode;
+    std::cout << "block No" << block->getNumber() << std::endl;
+    std::cout << "block name " << block << std::endl;
+    if (!block->getEntry())
+    {
+        std::cout << "Entry | Exit block\n"
+                  << std::endl;
     }
-    else{
-        std::cout<<"Treetop->Node of this block starts at "<<block->getEntry()->getNode() <<std::endl;
+    else
+    {
+        std::cout << "Treetop->Node of this block starts at " << block->getEntry()->getNode() << std::endl;
     }
-
 }
 
 int32_t TR_PreetOptimization::perform()
 {
     countOptimizationInvoked++;
-
     OMR::Logger *log = comp()->log();
+
     logprintf(trace(), log, "Performing Preet Optimization %d.\n", countOptimizationInvoked);
 
     if (trace())
     {
+
+        OMR::Logger *log = comp()->log();
         comp()->dumpMethodTrees(log, "Trees before Preet Optimization");
 
         // traversing via loops
         TR::Compilation *compilation = comp();
         TR::ResolvedMethodSymbol *resolvedMethodSymbol = compilation->getMethodSymbol();
+        TR_ResolvedMethod *resolvedMethod = resolvedMethodSymbol->getResolvedMethod();
+
+        // creating a log file which should contain dataFlow related Auxillary Info
+        std::string classNameStr(
+            resolvedMethod->classNameChars(),
+            resolvedMethod->classNameLength());
+        std::replace(classNameStr.begin(), classNameStr.end(), '/', '_');
+
+        std::string methodNameStr(
+            resolvedMethod->nameChars(),
+            resolvedMethod->nameLength());
+
+        std::string fileName = classNameStr + "_" + methodNameStr + ".log";
+
+        OMR::Logger *auxLogger =
+            OMR::TRIOStreamLogger::create(comp()->trPersistentMemory(),
+                                          fileName.c_str());
+        // auxLogger->printf("Class Name:%s", className);
+        // auxLogger->printf("Method Name:%s", methodName);
+        // auxLogger->printf("Class Name len:%d", resolvedMethod->classNameLength());
+        // auxLogger->printf("Method Name len :%d", resolvedMethod->nameLength());
+        // auxLogger->printf("Class Name:%.*s Method Name:%.*s\n",
+        //                   resolvedMethod->classNameLength(), className,
+        //                   resolvedMethod->nameLength(), methodName);
+        auxLogger->printf("hi\n");
+        AuxillaryInfo::setAuxillaryLogger(auxLogger);
+
+        AuxillaryInfo::getAuxillaryLogger()->printf("bye\n");
+        //--end log file related logic ---
 
         TR::TreeTop *tt = resolvedMethodSymbol->getFirstTreeTop();
-        TR::TreeTop *head = tt; //to keep the original tt stored
+
+        comp()->getDebug()->print(auxLogger,tt->getNextTreeTop());
+        TR::TreeTop *head = tt; // to keep the original tt stored
         // finding type of treetops like new load store
         // logprints(trace(), log, " Finding treeTop type \n");
 
@@ -262,12 +301,12 @@ int32_t TR_PreetOptimization::perform()
         //     NodeType treeTopType = findTreeTopType(tt, visited);
         // }
 
-        //initializing treetops in and out sets
+        // initializing treetops in and out sets
         log->printf("Initializing In/Out sets of treeTops\n");
-        log->preetPrintf(__FILE__,"Worked kya Initializing In/Out sets of treeTops\n");
+        log->preetPrintf(__FILE__, "Worked kya Initializing In/Out sets of treeTops\n");
         for (; tt; tt = tt->getNextTreeTop())
         {
-                tt->initializeInAndOutSets();
+            tt->initializeInAndOutSets();
         }
         // for (; tt; tt = tt->getNextTreeTop())
         // {
@@ -288,14 +327,17 @@ int32_t TR_PreetOptimization::perform()
         //     // IntraDataFlow *idf = new IntraDataFlow();
         //     // idf->performAnalysis(tt);
         // }
-        
-        //perform dataflow over the method starting from head tt
-        // IntraDataFlow *idf = new IntraDataFlow();
-        // idf->performAnalysis(head,comp());
-        
+
+        // perform dataflow over the method starting from head tt
+        //  IntraDataFlow *idf = new IntraDataFlow();
+        //  idf->performAnalysis(head,comp());
+
         IntraDataFlow *cfgIdf = new IntraDataFlow(comp());
         cfgIdf->performAnalysisOverCFG(comp());
 
+        std::cout << "POST FIXED POINT\n";
+        WalkOverTreeIL *walkTree = new WalkOverTreeIL(comp());
+        walkTree->walkTheTreeForInfo();
 
         // for(;tt;tt=tt->getNextTreeTop()){
         //     printTreeTop(tt);
@@ -319,13 +361,12 @@ int32_t TR_PreetOptimization::perform()
         // idf->performAnalysis(head);
     }
 
-
-//why do below stmts get printd even during "make all"
-    // TR::Compilation *compilation = comp();
-    // TR::ResolvedMethodSymbol *resolvedMethodSymbol = compilation->getMethodSymbol();
-    // std::cout<<"\n------------------------------------------------------------------------\n";
-    // std::cout<<resolvedMethodSymbol->getResolvedMethod()->nameChars()<<"\n";
-    // std::cout<<resolvedMethodSymbol->getResolvedMethod()->signatureChars()<<"\n";
+    // why do below stmts get printd even during "make all"
+    //  TR::Compilation *compilation = comp();
+    //  TR::ResolvedMethodSymbol *resolvedMethodSymbol = compilation->getMethodSymbol();
+    //  std::cout<<"\n------------------------------------------------------------------------\n";
+    //  std::cout<<resolvedMethodSymbol->getResolvedMethod()->nameChars()<<"\n";
+    //  std::cout<<resolvedMethodSymbol->getResolvedMethod()->signatureChars()<<"\n";
 
     // // cfg related
     // TR::CFG * cfg = comp()->getFlowGraph();

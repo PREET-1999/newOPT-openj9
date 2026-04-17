@@ -122,6 +122,9 @@ PTG *StoreStmt::Gen()
     // inserting into heap [fronMode,f]={toNode}
     for (auto a : fromNodes)
     {
+        TR::Symbol *sym = a->getSymbol();
+        if (sym->isLocalObject())
+            std::cout << "Node " << a << " is local object\n";
         for (auto b : toNodes)
         {
             /*
@@ -130,6 +133,13 @@ PTG *StoreStmt::Gen()
             */
             std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {a, f};
             genPTG->insertIntoHeap(NodeObjectField, b);
+
+            // checking for local allocation
+
+            TR::Symbol *sym = b->getSymbol();
+            if (sym->isLocalObject())
+
+                std::cout << "Node " << b << " is local object\n";
         }
     }
     std::cout << "genPTG heap....\n";
@@ -265,6 +275,29 @@ std::set<TR::Node *> StoreStmt::getNodePointedByBase()
     int lhsAuto = _stmtInfo->lhsAuto;
     nodes = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
 
+
+
+    //testing isLocalAllocation which is avaialoble is for what scenarios
+    TR::Node *node = _tt->getNode();
+    TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    if (firstChildNode)
+    {
+        TR::Node *storeNode = firstChildNode;
+        TR::Node *baseNode = storeNode->getFirstChild(); // base Node of store stmt
+        if (baseNode->getOpCode().hasSymbolReference() && baseNode->getSymbolReference())
+        {
+            TR::SymbolReference *symRef = baseNode->getSymbolReference();
+            TR::Symbol *sym = symRef->getSymbol();
+            if (sym->getKind() == TR::Symbol::IsAutomatic)
+            {
+                    if(sym->isLocalObject())
+                     std::cout<<"<auto " <<symRef->getCPIndex() <<"> is local\n"; 
+
+            }
+        }
+    }
+
+
     // this works for basic a.f node
     //  std::set<TR::Node *> nodes; // a.f =b   a->{0xab , ...}
     //  int lhsAuto = getlhsAuto();
@@ -299,8 +332,13 @@ std::set<TR::Node *> StoreStmt::getNodeToBeStoredIntoBase()
 {
 
     std::set<TR::Node *> nodes; // a.f=b   b->{0xab , ...}
+    if(_stmtInfo->rhsNewNode)
+        nodes.insert(_stmtInfo->rhsNewNode);
+    else{
     int rhsAuto = _stmtInfo->rhsAuto;
     nodes = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
+    }
+
 
     // this works for basic a.f=b
     //  std::set<TR::Node *> nodes; // a.f=b   b->{0xab , ...}
