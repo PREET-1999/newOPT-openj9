@@ -5,6 +5,8 @@
 #include "il/Node_inlines.hpp"
 #include <bits/stdc++.h>
 #include "il/SymbolReference.hpp"
+#include "optimizer/preetAnalysis/StatementInfoTable.hpp"
+
 CopyStmt::CopyStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
 {
     _tt = tt;
@@ -21,6 +23,21 @@ PTG *CopyStmt::Gen()
     // first get the set<Node*>pointed by 1
     int lhsAuto = getToAuto();   // actuallly this will not be in this tt, figure out how to deal with this
     int rhsAuto = getFromAuto(); // actuallly this will not be in this tt, figure out how to deal with this
+
+    //If rhs is this or param
+    if(rhsAuto == -1){
+        // set lhs to also point to bottom
+        TR::Node *bottom = nullptr;
+        genPTG->insertIntoStack(lhsAuto, bottom);
+
+        // no further processing needed
+        return genPTG;
+
+    }
+
+
+
+
 
     // std::set<TR::Node*> objsOfBase = _tt->_in->getNodeSetForKeyInStack(base);
     std::set<TR::Node *> objsOfRhsAuto = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
@@ -148,44 +165,47 @@ TR::SymbolReference *CopyStmt::getSymRef()
 
 int CopyStmt::getFromAuto()
 {
-    TR::Node *node = _tt->getNode();
-    if (node->getOpCodeValue() == TR::astore)
-    {
-        TR::Node *firstChildNode = node->getFirstChild();
-        if (firstChildNode)
-        {
-            if (firstChildNode->getOpCodeValue() == TR::aload)
-            {
-                TR::SymbolReference *symRef = firstChildNode->getSymbolReference();
-                TR::Symbol *sym = symRef->getSymbol();
-                if (sym->getKind() == TR::Symbol::IsAutomatic)
-                {
-                    int32_t slot = symRef->getCPIndex();
-                    std::cout << "(Copy rhs)slot is " << slot << "\n";
-                    return slot;
-                }
-            }
-        }
-    }
-    return 0;
+        return _stmtInfo->rhsAuto;
+
+    // TR::Node *node = _tt->getNode();
+    // if (node->getOpCodeValue() == TR::astore)
+    // {
+    //     TR::Node *firstChildNode = node->getFirstChild();
+    //     if (firstChildNode)
+    //     {
+    //         if (firstChildNode->getOpCodeValue() == TR::aload)
+    //         {
+    //             TR::SymbolReference *symRef = firstChildNode->getSymbolReference();
+    //             TR::Symbol *sym = symRef->getSymbol();
+    //             if (sym->getKind() == TR::Symbol::IsAutomatic)
+    //             {
+    //                 int32_t slot = symRef->getCPIndex();
+    //                 std::cout << "(Copy rhs)slot is " << slot << "\n";
+    //                 return slot;
+    //             }
+    //         }
+    //     }
+    // }
+    // return 0;
 }
 
 int CopyStmt::getToAuto()
 {
-    TR::Node *node = _tt->getNode();
-    if (node->getOpCodeValue() == TR::astore)
-    {
-        if (node->getOpCode().hasSymbolReference() && node->getSymbolReference())
-        {
-            TR::SymbolReference *symRef = node->getSymbolReference();
-            TR::Symbol *sym = symRef->getSymbol();
-            if (sym->getKind() == TR::Symbol::IsAutomatic)
-            {
-                int32_t slot = symRef->getCPIndex();
-                std::cout << "(Copy lhs)slot is " << slot << "\n";
-                return slot;
-            }
-        }
-    }
-    return 0;
+    return _stmtInfo->lhsAuto;
+    // TR::Node *node = _tt->getNode();
+    // if (node->getOpCodeValue() == TR::astore)
+    // {
+    //     if (node->getOpCode().hasSymbolReference() && node->getSymbolReference())
+    //     {
+    //         TR::SymbolReference *symRef = node->getSymbolReference();
+    //         TR::Symbol *sym = symRef->getSymbol();
+    //         if (sym->getKind() == TR::Symbol::IsAutomatic)
+    //         {
+    //             int32_t slot = symRef->getCPIndex();
+    //             std::cout << "(Copy lhs)slot is " << slot << "\n";
+    //             return slot;
+    //         }
+    //     }
+    // }
+    // return 0;
 }

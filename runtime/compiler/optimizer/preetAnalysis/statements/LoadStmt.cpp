@@ -6,7 +6,7 @@
 #include <bits/stdc++.h>
 #include "il/SymbolReference.hpp"
 #include "optimizer/preetAnalysis/StatementInfoTable.hpp"
-LoadStmt::LoadStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
+LoadStmt::LoadStmt(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
 {
     _tt = tt;
     _stmtInfo = stmtInfo;
@@ -23,6 +23,26 @@ PTG *LoadStmt::Gen()
     // first get the set<Node*>pointed by 1
     int lhsAuto = getlhsAuto(); // actuallly this will not be in this tt, figure out how to deal with this
     int rhsAuto = getrhsAuto();
+
+    /*
+    Handling this and param cases before proceeding further
+    */
+
+    if (lhsAuto == -1) // its a param (this=b.f -> wrong   'this' isnt alowed to be assigned)
+    {
+        return genPTG;
+    }
+
+    if(rhsAuto == -1){
+        TR::Node *bottom = nullptr;
+        genPTG->insertIntoStack(lhsAuto, bottom);
+
+        // no further processing needed
+        return genPTG;
+    }
+    /*
+        Done handling this and param cases
+    */
 
     // check if b->bottom ? (a=b.f)
     bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
@@ -43,14 +63,14 @@ PTG *LoadStmt::Gen()
         {
             TR::Node *bottom = nullptr;
             genPTG->insertIntoStack(lhsAuto, bottom);
-            //no further processing
+            // no further processing
             return genPTG;
         }
     }
 
     // std::set<TR::Node*> objsOfBase = _tt->_in->getNodeSetForKeyInStack(base);
     std::set<TR::Node *> objsOfBase = getNodePointedByBase();
-        std::vector<TR::Node *> toNodes;
+    std::vector<TR::Node *> toNodes;
 
     for (auto node : objsOfBase)
     {
@@ -64,20 +84,22 @@ PTG *LoadStmt::Gen()
         }
     }
 
-    //if to Nodes has bottom , point lhs to bottom
-    for(auto node :toNodes){
-        if(node == nullptr){
+    // if to Nodes has bottom , point lhs to bottom
+    for (auto node : toNodes)
+    {
+        if (node == nullptr)
+        {
             TR::Node *bottom = nullptr;
             genPTG->insertIntoStack(lhsAuto, bottom);
             return genPTG;
         }
     }
-    TR::SymbolReference* symref = getSymRef();
+    TR::SymbolReference *symref = getSymRef();
     std::cout << "load " << symref << "\n";
     for (auto node : toNodes)
     {
-        
-            genPTG->insertIntoStack(lhsAuto, node);
+
+        genPTG->insertIntoStack(lhsAuto, node);
     }
     genPTG->printStack();
     genPTG->printHeap();
@@ -192,16 +214,16 @@ TR::SymbolReference *LoadStmt::getSymRef()
     int rhsStackFieldLength = _stmtInfo->rhsFieldStack.size();
     symRef = _stmtInfo->rhsFieldStack[rhsStackFieldLength - 1];
 
-    //works for basic a = b.f
-    // TR::Node *node = _tt->getNode();
-    // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
-    // if (firstChildNode)                               // the aloadi
-    // {
-    //     symRef = firstChildNode->getSymbolReference();
-    //     int32_t index = symRef->getCPIndex();
-    //     std::cout << "(load)symRef " << symRef << "\n";
-    //     std::cout << "index " << index << "\n";
-    // }
+    // works for basic a = b.f
+    //  TR::Node *node = _tt->getNode();
+    //  TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    //  if (firstChildNode)                               // the aloadi
+    //  {
+    //      symRef = firstChildNode->getSymbolReference();
+    //      int32_t index = symRef->getCPIndex();
+    //      std::cout << "(load)symRef " << symRef << "\n";
+    //      std::cout << "index " << index << "\n";
+    //  }
 
     return symRef;
 }
@@ -229,7 +251,7 @@ int LoadStmt::getlhsAuto()
 
 int LoadStmt::getrhsAuto()
 {
-        return _stmtInfo->rhsAuto;
+    return _stmtInfo->rhsAuto;
 
     // TR::Node *node = _tt->getNode();
     // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent

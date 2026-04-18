@@ -17,6 +17,50 @@ PTG *StoreStmt::Gen()
     // create a new PTG object (stack and heap)
     PTG *genPTG = new PTG();
     std::cout << "In store stmt gen" << "\n";
+
+    int lhsAuto = getlhsAuto();
+    int rhsAuto = getrhsAuto();
+    /*
+   Handling this and param cases before proceeding further
+   */
+
+    if (lhsAuto == -1) // its a param (this=b.f -> wrong   'this' isnt alowed to be assigned)
+    {
+        return genPTG;
+    }
+
+    if (rhsAuto == -1)
+    {
+
+        TR::SymbolReference *f = getSymRef();
+
+        std::vector<TR::Node *> fromNodes;
+        std::set<TR::Node *> baseNode = getNodePointedByBase();
+        for (auto node : baseNode)
+        {
+            if (_stmtInfo->lhsFieldStack.size() == 1)
+            {
+                fromNodes.push_back(node);
+            }
+            else
+            {
+                _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
+            }
+        }
+        TR::Node *bottom = nullptr;
+        for (auto fromNode : fromNodes)
+        {
+            std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
+            genPTG->insertIntoHeap(NodeObjectField, bottom);
+        }
+
+        // no further processing needed
+        return genPTG;
+    }
+    /*
+        Done handling this and param cases
+    */
+
     std::set<TR::Node *> baseNode = getNodePointedByBase();
     std::set<TR::Node *> storedNode = getNodeToBeStoredIntoBase();
     TR::SymbolReference *f = getSymRef();
@@ -24,7 +68,7 @@ PTG *StoreStmt::Gen()
     std::cout << "genPTG heap before inserting...\n";
     genPTG->printHeap();
 
-    int lhsAuto = getlhsAuto();
+    // int lhsAuto = getlhsAuto();
 
     bool isObjPointedByLhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(lhsAuto);
     if (isObjPointedByLhsBottom)
@@ -32,6 +76,7 @@ PTG *StoreStmt::Gen()
         // no processing neeedded
         return genPTG;
     }
+
 
     std::set<TR::Node *> nodeSetOfLhs = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
     for (auto node : nodeSetOfLhs)
@@ -76,6 +121,23 @@ PTG *StoreStmt::Gen()
         if (node == nullptr) // can you have a routine isBOttom rather than direct nullptr
             return genPTG;
     }
+
+
+    // check if b->bottom ? (a.f=b)
+    bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
+    if (isObjPointedByRhsBottom)
+    {
+
+        TR::Node *bottom = nullptr;
+            for (auto fromNode : fromNodes)
+            {
+                std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
+                genPTG->insertIntoHeap(NodeObjectField, bottom);
+            }
+            return genPTG;
+    }
+
+
 
     std::vector<TR::Node *> toNodes;
     std::cout << "rhs fieldStack [\n";
@@ -158,6 +220,7 @@ PTG *StoreStmt::Kill()
     std::cout << "in kill the initial inset is\n";
 
     PTG *killPTG = new PTG();
+    int rhsAuto = getrhsAuto();
 
     std::set<TR::Node *> storedNode = getNodeToBeStoredIntoBase();
     std::vector<TR::Node *> toNodes;
@@ -172,7 +235,7 @@ PTG *StoreStmt::Kill()
             _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
         }
     }
-    bool isObjPointedByRhsBottom = false;
+    bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
     for (auto node : toNodes)
     {
 
@@ -181,7 +244,7 @@ PTG *StoreStmt::Kill()
             isObjPointedByRhsBottom = true;
         }
     }
-    if (isObjPointedByRhsBottom)
+    if (isObjPointedByRhsBottom || _stmtInfo->rhsAuto == -1) //this or param also means rhs pointsTo Bottom
     {
         // kill previous as anyways bottom will be added
         std::set<TR::Node *> baseNodes = getNodePointedByBase();
@@ -275,28 +338,25 @@ std::set<TR::Node *> StoreStmt::getNodePointedByBase()
     int lhsAuto = _stmtInfo->lhsAuto;
     nodes = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
 
+    // testing isLocalAllocation which is avaialoble is for what scenarios
+    //  TR::Node *node = _tt->getNode();
+    //  TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    //  if (firstChildNode)
+    //  {
+    //      TR::Node *storeNode = firstChildNode;
+    //      TR::Node *baseNode = storeNode->getFirstChild(); // base Node of store stmt
+    //      if (baseNode->getOpCode().hasSymbolReference() && baseNode->getSymbolReference())
+    //      {
+    //          TR::SymbolReference *symRef = baseNode->getSymbolReference();
+    //          TR::Symbol *sym = symRef->getSymbol();
+    //          if (sym->getKind() == TR::Symbol::IsAutomatic)
+    //          {
+    //                  if(sym->isLocalObject())
+    //                   std::cout<<"<auto " <<symRef->getCPIndex() <<"> is local\n";
 
-
-    //testing isLocalAllocation which is avaialoble is for what scenarios
-    TR::Node *node = _tt->getNode();
-    TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
-    if (firstChildNode)
-    {
-        TR::Node *storeNode = firstChildNode;
-        TR::Node *baseNode = storeNode->getFirstChild(); // base Node of store stmt
-        if (baseNode->getOpCode().hasSymbolReference() && baseNode->getSymbolReference())
-        {
-            TR::SymbolReference *symRef = baseNode->getSymbolReference();
-            TR::Symbol *sym = symRef->getSymbol();
-            if (sym->getKind() == TR::Symbol::IsAutomatic)
-            {
-                    if(sym->isLocalObject())
-                     std::cout<<"<auto " <<symRef->getCPIndex() <<"> is local\n"; 
-
-            }
-        }
-    }
-
+    //         }
+    //     }
+    // }
 
     // this works for basic a.f node
     //  std::set<TR::Node *> nodes; // a.f =b   a->{0xab , ...}
@@ -332,13 +392,13 @@ std::set<TR::Node *> StoreStmt::getNodeToBeStoredIntoBase()
 {
 
     std::set<TR::Node *> nodes; // a.f=b   b->{0xab , ...}
-    if(_stmtInfo->rhsNewNode)
+    if (_stmtInfo->rhsNewNode)
         nodes.insert(_stmtInfo->rhsNewNode);
-    else{
-    int rhsAuto = _stmtInfo->rhsAuto;
-    nodes = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
+    else
+    {
+        int rhsAuto = _stmtInfo->rhsAuto;
+        nodes = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
     }
-
 
     // this works for basic a.f=b
     //  std::set<TR::Node *> nodes; // a.f=b   b->{0xab , ...}
@@ -396,48 +456,52 @@ TR::SymbolReference *StoreStmt::getSymRef()
 
 int StoreStmt::getlhsAuto()
 {
-    TR::Node *node = _tt->getNode();
-    TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
-    if (firstChildNode)
-    {
-        TR::Node *storeNode = firstChildNode;
-        TR::Node *baseNode = storeNode->getFirstChild(); // base Node of store stmt
-        if (baseNode->getOpCode().hasSymbolReference() && baseNode->getSymbolReference())
-        {
-            TR::SymbolReference *symRef = baseNode->getSymbolReference();
-            TR::Symbol *sym = symRef->getSymbol();
-            if (sym->getKind() == TR::Symbol::IsAutomatic)
-            {
-                int32_t slot = symRef->getCPIndex();
-                std::cout << "slot for Store(lhs)is " << slot << "\n";
-                return slot;
-            }
-        }
-    }
-    return -1;
+
+    return _stmtInfo->lhsAuto;
+    // TR::Node *node = _tt->getNode();
+    // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    // if (firstChildNode)
+    // {
+    //     TR::Node *storeNode = firstChildNode;
+    //     TR::Node *baseNode = storeNode->getFirstChild(); // base Node of store stmt
+    //     if (baseNode->getOpCode().hasSymbolReference() && baseNode->getSymbolReference())
+    //     {
+    //         TR::SymbolReference *symRef = baseNode->getSymbolReference();
+    //         TR::Symbol *sym = symRef->getSymbol();
+    //         if (sym->getKind() == TR::Symbol::IsAutomatic)
+    //         {
+    //             int32_t slot = symRef->getCPIndex();
+    //             std::cout << "slot for Store(lhs)is " << slot << "\n";
+    //             return slot;
+    //         }
+    //     }
+    // }
+    // return -1;
 }
 
 int StoreStmt::getrhsAuto()
 {
-    TR::Node *node = _tt->getNode();
-    TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
-    if (firstChildNode)
-    {
-        TR::Node *storeNode = firstChildNode;
-        TR::Node *baseNode = storeNode->getFirstChild();          // base Node of store stmt
-        TR::Node *storingValueNode = storeNode->getSecondChild(); // rhs node of store stmt
+        return _stmtInfo->rhsAuto;
 
-        if (storingValueNode->getOpCode().hasSymbolReference() && storingValueNode->getSymbolReference())
-        {
-            TR::SymbolReference *symRef = storingValueNode->getSymbolReference();
-            TR::Symbol *sym = symRef->getSymbol();
-            if (sym->getKind() == TR::Symbol::IsAutomatic)
-            {
-                int32_t slot = symRef->getCPIndex();
-                std::cout << "slot for Store(rhs)is " << slot << "\n";
-                return slot;
-            }
-        }
-    }
-    return -1;
+    // TR::Node *node = _tt->getNode();
+    // TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+    // if (firstChildNode)
+    // {
+    //     TR::Node *storeNode = firstChildNode;
+    //     TR::Node *baseNode = storeNode->getFirstChild();          // base Node of store stmt
+    //     TR::Node *storingValueNode = storeNode->getSecondChild(); // rhs node of store stmt
+
+    //     if (storingValueNode->getOpCode().hasSymbolReference() && storingValueNode->getSymbolReference())
+    //     {
+    //         TR::SymbolReference *symRef = storingValueNode->getSymbolReference();
+    //         TR::Symbol *sym = symRef->getSymbol();
+    //         if (sym->getKind() == TR::Symbol::IsAutomatic)
+    //         {
+    //             int32_t slot = symRef->getCPIndex();
+    //             std::cout << "slot for Store(rhs)is " << slot << "\n";
+    //             return slot;
+    //         }
+    //     }
+    // }
+    // return -1;
 }

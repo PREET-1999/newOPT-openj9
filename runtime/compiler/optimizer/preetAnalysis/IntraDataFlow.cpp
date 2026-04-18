@@ -165,6 +165,7 @@ void IntraDataFlow::shoutOutLoud(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
         // }
         break;
     };
+    case TR::ResolveCHK: //for handling 'this'
     case TR::ResolveAndNULLCHK:
     {
         TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
@@ -269,21 +270,23 @@ bool IntraDataFlow::checkIfNewStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTabl
 
 bool IntraDataFlow::checkIfStoreStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
 {
-    bool lhsValid = (stmtInfo->lhsAuto != -1) &&
+    bool lhsValid = 
                     (stmtInfo->hasLHSFields());
 
-    bool rhsValid = (stmtInfo->rhsNewNode != nullptr) ||
-                    (stmtInfo->rhsAuto != -1);
+    // bool rhsValid = (stmtInfo->rhsNewNode != nullptr);
 
-    return lhsValid && rhsValid;
+    // return lhsValid && rhsValid;
+
+        return lhsValid ;
+
 }
 
 bool IntraDataFlow::checkIfLoadStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
 { // for now not hanling a=(new Node()).f...do I want to handle such??
-    bool lhsValid = (stmtInfo->lhsAuto != -1) &&
+    bool lhsValid = 
                     (!stmtInfo->hasLHSFields());
 
-    bool rhsValid = (stmtInfo->rhsAuto != -1) &&
+    bool rhsValid = 
                     (stmtInfo->hasRHSFields());
 
     return lhsValid && rhsValid;
@@ -295,7 +298,7 @@ bool IntraDataFlow::checkIfCopyStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTab
                     (!stmtInfo->hasLHSFields()) &&
                     (stmtInfo->lhsNewNode == nullptr);
 
-    bool rhsValid = (stmtInfo->rhsAuto != -1) &&
+    bool rhsValid = 
                     (!stmtInfo->hasRHSFields()) &&
                     (stmtInfo->rhsNewNode == nullptr);
 
