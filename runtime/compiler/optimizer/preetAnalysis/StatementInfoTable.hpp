@@ -35,6 +35,9 @@ public:
     void setLHSNewNode(TR::Node* node);
     void setRHSNewNode(TR::Node* node);
 
+
+    bool isParam(int slot);
+    bool isThis(int slot);
     void printStatementInfo();
 
 public:

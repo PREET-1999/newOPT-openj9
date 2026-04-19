@@ -23,12 +23,12 @@ void StatementInfoTable::clear()
     rhsNewNode = nullptr;
 }
 
-void StatementInfoTable::pushLHSField(TR::SymbolReference* symRef)
+void StatementInfoTable::pushLHSField(TR::SymbolReference *symRef)
 {
     lhsFieldStack.push_back(symRef);
 }
 
-void StatementInfoTable::pushRHSField(TR::SymbolReference* symRef)
+void StatementInfoTable::pushRHSField(TR::SymbolReference *symRef)
 {
     rhsFieldStack.push_back(symRef);
 }
@@ -53,14 +53,30 @@ void StatementInfoTable::setRHSAuto(int value)
     rhsAuto = value;
 }
 
-void StatementInfoTable::setLHSNewNode(TR::Node* node)
+void StatementInfoTable::setLHSNewNode(TR::Node *node)
 {
     lhsNewNode = node;
 }
 
-void StatementInfoTable::setRHSNewNode(TR::Node* node)
+void StatementInfoTable::setRHSNewNode(TR::Node *node)
 {
     rhsNewNode = node;
+}
+
+bool StatementInfoTable::isParam(int slot)
+{
+    // as of now param and this are considered same
+    if (slot == -1)
+        return true;
+    return false;
+}
+
+bool StatementInfoTable::isThis(int slot)
+{
+    // as of now param and this are considered same
+    if (slot == -1)
+        return true;
+    return false;
 }
 
 void StatementInfoTable::printStatementInfo()

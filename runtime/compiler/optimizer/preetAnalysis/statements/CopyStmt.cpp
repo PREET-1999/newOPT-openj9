@@ -7,7 +7,7 @@
 #include "il/SymbolReference.hpp"
 #include "optimizer/preetAnalysis/StatementInfoTable.hpp"
 
-CopyStmt::CopyStmt(TR::TreeTop *tt,StatementInfoTable* stmtInfo)
+CopyStmt::CopyStmt(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
 {
     _tt = tt;
     _stmtInfo = stmtInfo;
@@ -20,34 +20,90 @@ PTG *CopyStmt::Gen()
     std::cout << "Copy Gen\n";
     // c = a
 
-    // first get the set<Node*>pointed by 1
-    int lhsAuto = getToAuto();   // actuallly this will not be in this tt, figure out how to deal with this
-    int rhsAuto = getFromAuto(); // actuallly this will not be in this tt, figure out how to deal with this
+    // a = b
+    /*
+    we can form these cases
+    - a is lhsAuto, b is rhsBase
 
-    //If rhs is this or param
-    if(rhsAuto == -1){
-        // set lhs to also point to bottom
-        TR::Node *bottom = nullptr;
-        genPTG->insertIntoStack(lhsAuto, bottom);
+    - Is lhsAuto a param
+    - Is lhsAuto pointing to bottom
+    - Is lhsAuto poining to actual obj
 
-        // no further processing needed
-        return genPTG;
-
-    }
-
-
-
-
-
-    // std::set<TR::Node*> objsOfBase = _tt->_in->getNodeSetForKeyInStack(base);
-    std::set<TR::Node *> objsOfRhsAuto = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
-
-    for (auto node : objsOfRhsAuto)
+    - Is rhsBase this
+    - Is rhsBase param
+    - Is rhsBase pointing to bottom
+    - Is rhsBase poining to actual obj
+    */
     {
-        genPTG->insertIntoStack(lhsAuto, node);
+        int lhsAuto = getToAuto();
+        int rhsAuto = getFromAuto();
+
+        if (_stmtInfo->isParam(lhsAuto))
+        {
+            // do nothing
+            return genPTG;
+        }
+
+        if (_tt->_in->isPointsToOfKeyInStackBottom(lhsAuto))
+        {
+            // do nothing
+            return genPTG;
+        }
+
+        // lhsAuto isnt pointing to bottom for sure( can point to nothing or an actualo obj)
+
+        if (_stmtInfo->isThis(rhsAuto))
+        {
+            TR::Node *bottom = nullptr;
+            genPTG->insertIntoStack(lhsAuto, bottom);
+            return genPTG;
+        }
+        if (_stmtInfo->isParam(rhsAuto))
+        {
+            TR::Node *bottom = nullptr;
+            genPTG->insertIntoStack(lhsAuto, bottom);
+            return genPTG;
+        }
+        if (_tt->_in->isPointsToOfKeyInStackBottom(rhsAuto))
+        {
+            TR::Node *bottom = nullptr;
+            genPTG->insertIntoStack(lhsAuto, bottom);
+            return genPTG;
+        }
+
+        //  rhsAuto isnt pointing to bottom for sure
+        std::set<TR::Node *> toNodes = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
+        for (auto toNode : toNodes)
+        {
+            genPTG->insertIntoStack(lhsAuto, toNode);
+        }
+        return genPTG;
     }
-    genPTG->printStack();
-    genPTG->printHeap();
+
+    // // first get the set<Node*>pointed by 1
+    // int lhsAuto = getToAuto();
+    // int rhsAuto = getFromAuto();
+
+    // // If rhs is this or param
+    // if (rhsAuto == -1)
+    // {
+    //     // set lhs to also point to bottom
+    //     TR::Node *bottom = nullptr;
+    //     genPTG->insertIntoStack(lhsAuto, bottom);
+
+    //     // no further processing needed
+    //     return genPTG;
+    // }
+
+    // // std::set<TR::Node*> objsOfBase = _tt->_in->getNodeSetForKeyInStack(base);
+    // std::set<TR::Node *> objsOfRhsAuto = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
+
+    // for (auto node : objsOfRhsAuto)
+    // {
+    //     genPTG->insertIntoStack(lhsAuto, node);
+    // }
+    // genPTG->printStack();
+    // genPTG->printHeap();
 
     return genPTG;
 }
@@ -110,7 +166,7 @@ PTG *CopyStmt::SetUnion(PTG *filteredSet, PTG *newSet)
         nodes = it->second;
         for (auto node : nodes)
         {
-            out->insertIntoStack(autoSlot,node);
+            out->insertIntoStack(autoSlot, node);
         }
     }
     // out->printStack();
@@ -165,7 +221,7 @@ TR::SymbolReference *CopyStmt::getSymRef()
 
 int CopyStmt::getFromAuto()
 {
-        return _stmtInfo->rhsAuto;
+    return _stmtInfo->rhsAuto;
 
     // TR::Node *node = _tt->getNode();
     // if (node->getOpCodeValue() == TR::astore)

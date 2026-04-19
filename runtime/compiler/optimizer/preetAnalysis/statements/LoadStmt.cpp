@@ -16,93 +16,180 @@ PTG *LoadStmt::Gen()
 {
     PTG *genPTG = new PTG();
 
-    std::cout << "Load Gen\n";
-    // c = a.f
-    //  auto 4 = auto 1.f
-
-    // first get the set<Node*>pointed by 1
-    int lhsAuto = getlhsAuto(); // actuallly this will not be in this tt, figure out how to deal with this
-    int rhsAuto = getrhsAuto();
-
+    // a = b.[f]*
     /*
-    Handling this and param cases before proceeding further
+    we can form these cases
+    - a is lhsBase, b is rhsBase
+
+    - Is lhsBase a param
+    - Is lhsBase pointing to bottom
+    - Is lhsBase poining to actual obj
+
+    - Is rhsBase this
+    - Is rhsBase param
+    - Is rhsBase pointing to bottom
+    - Is rhsBase.f..(n) or toNodes tak any of it pointing to bottom
+    - Is rhsBase.f..(n) or toNodes poining to actual obj
+
     */
-
-    if (lhsAuto == -1) // its a param (this=b.f -> wrong   'this' isnt alowed to be assigned)
     {
-        return genPTG;
-    }
+        int lhsAuto = getlhsAuto();
+        int rhsAuto = getrhsAuto();
 
-    if(rhsAuto == -1){
-        TR::Node *bottom = nullptr;
-        genPTG->insertIntoStack(lhsAuto, bottom);
-
-        // no further processing needed
-        return genPTG;
-    }
-    /*
-        Done handling this and param cases
-    */
-
-    // check if b->bottom ? (a=b.f)
-    bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
-    if (isObjPointedByRhsBottom)
-    {
-        // set lhs to also point to bottom
-        TR::Node *bottom = nullptr;
-        genPTG->insertIntoStack(lhsAuto, bottom);
-
-        // no further processing needed
-        return genPTG;
-    }
-
-    std::set<TR::Node *> nodeSetOfRhs = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
-    for (auto node : nodeSetOfRhs)
-    {
-        if (_tt->_in->doesStarFieldFromNodeExists(node))
+        if (_stmtInfo->isParam(lhsAuto))
         {
-            TR::Node *bottom = nullptr;
-            genPTG->insertIntoStack(lhsAuto, bottom);
-            // no further processing
+            // do nothing
             return genPTG;
         }
-    }
 
-    // std::set<TR::Node*> objsOfBase = _tt->_in->getNodeSetForKeyInStack(base);
-    std::set<TR::Node *> objsOfBase = getNodePointedByBase();
-    std::vector<TR::Node *> toNodes;
-
-    for (auto node : objsOfBase)
-    {
-        if (_stmtInfo->rhsFieldStack.size() == 0)
+        if (_tt->_in->isPointsToOfKeyInStackBottom(lhsAuto))
         {
-            toNodes.push_back(node);
+            // do nothing
+            return genPTG;
         }
-        else
-        {
-            _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
-        }
-    }
-
-    // if to Nodes has bottom , point lhs to bottom
-    for (auto node : toNodes)
-    {
-        if (node == nullptr)
+        // lhsAuto isnt pointing to bottom for sure( can point to nothing or an actualo obj)
+        if (_stmtInfo->isThis(rhsAuto))
         {
             TR::Node *bottom = nullptr;
             genPTG->insertIntoStack(lhsAuto, bottom);
             return genPTG;
         }
-    }
-    TR::SymbolReference *symref = getSymRef();
-    std::cout << "load " << symref << "\n";
-    for (auto node : toNodes)
-    {
+        if (_stmtInfo->isParam(rhsAuto))
+        {
+            TR::Node *bottom = nullptr;
+            genPTG->insertIntoStack(lhsAuto, bottom);
+            return genPTG;
+        }
+        if (_tt->_in->isPointsToOfKeyInStackBottom(rhsAuto))
+        {
+            TR::Node *bottom = nullptr;
+            genPTG->insertIntoStack(lhsAuto, bottom);
+            return genPTG;
+        }
+        //  rhsAuto isnt pointing to bottom for sure
 
-        genPTG->insertIntoStack(lhsAuto, node);
+        std::set<TR::Node *> objsOfBase = getNodePointedByBase();
+        std::vector<TR::Node *> toNodes;
+
+        for (auto node : objsOfBase)
+        {
+            if (_stmtInfo->rhsFieldStack.size() == 0)
+            {
+                toNodes.push_back(node);
+            }
+            else
+            {
+                _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
+            }
+        }
+
+        // Is rhsBase.f..(n) or toNodes tak any of it pointing to bottom
+        for (auto node : toNodes)
+        {
+            if (node == nullptr)
+            {
+                TR::Node *bottom = nullptr;
+                genPTG->insertIntoStack(lhsAuto, bottom);
+                return genPTG;
+            }
+        }
+
+        TR::SymbolReference *symref = getSymRef();
+        for (auto node : toNodes)
+        {
+            genPTG->insertIntoStack(lhsAuto, node);
+        }
+        return genPTG;
     }
-    genPTG->printStack();
-    genPTG->printHeap();
+
+    // std::cout << "Load Gen\n";
+    // // c = a.f
+    // //  auto 4 = auto 1.f
+
+    // // first get the set<Node*>pointed by 1
+    // int lhsAuto = getlhsAuto();
+    // int rhsAuto = getrhsAuto();
+
+    // /*
+    // Handling this and param cases before proceeding further
+    // */
+
+    // if (lhsAuto == -1) // its a param (this=b.f -> wrong   'this' isnt alowed to be assigned)
+    // {
+    //     return genPTG;
+    // }
+
+    // if (rhsAuto == -1)
+    // {
+    //     TR::Node *bottom = nullptr;
+    //     genPTG->insertIntoStack(lhsAuto, bottom);
+
+    //     // no further processing needed
+    //     return genPTG;
+    // }
+    // /*
+    //     Done handling this and param cases
+    // */
+
+    // // check if b->bottom ? (a=b.f)
+    // bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
+    // if (isObjPointedByRhsBottom)
+    // {
+    //     // set lhs to also point to bottom
+    //     TR::Node *bottom = nullptr;
+    //     genPTG->insertIntoStack(lhsAuto, bottom);
+
+    //     // no further processing needed
+    //     return genPTG;
+    // }
+
+    // std::set<TR::Node *> nodeSetOfRhs = _tt->_in->getNodeSetForKeyInStack(rhsAuto);
+    // for (auto node : nodeSetOfRhs)
+    // {
+    //     if (_tt->_in->doesStarFieldFromNodeExists(node))
+    //     {
+    //         TR::Node *bottom = nullptr;
+    //         genPTG->insertIntoStack(lhsAuto, bottom);
+    //         // no further processing
+    //         return genPTG;
+    //     }
+    // }
+
+    // // std::set<TR::Node*> objsOfBase = _tt->_in->getNodeSetForKeyInStack(base);
+    // std::set<TR::Node *> objsOfBase = getNodePointedByBase();
+    // std::vector<TR::Node *> toNodes;
+
+    // for (auto node : objsOfBase)
+    // {
+    //     if (_stmtInfo->rhsFieldStack.size() == 0)
+    //     {
+    //         toNodes.push_back(node);
+    //     }
+    //     else
+    //     {
+    //         _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
+    //     }
+    // }
+
+    // // if to Nodes has bottom , point lhs to bottom
+    // for (auto node : toNodes)
+    // {
+    //     if (node == nullptr)
+    //     {
+    //         TR::Node *bottom = nullptr;
+    //         genPTG->insertIntoStack(lhsAuto, bottom);
+    //         return genPTG;
+    //     }
+    // }
+    // TR::SymbolReference *symref = getSymRef();
+    // std::cout << "load " << symref << "\n";
+    // for (auto node : toNodes)
+    // {
+
+    //     genPTG->insertIntoStack(lhsAuto, node);
+    // }
+    // genPTG->printStack();
+    // genPTG->printHeap();
 
     return genPTG;
 }
