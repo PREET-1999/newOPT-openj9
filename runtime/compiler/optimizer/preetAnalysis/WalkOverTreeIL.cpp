@@ -28,6 +28,7 @@
 #include "optimizer/preetAnalysis/statements/StoreStmt.hpp"
 #include "optimizer/preetAnalysis/StatementInfoTable.hpp"
 #include "optimizer/preetAnalysis/AuxillaryInfo.hpp"
+#include "optimizer/TransformUtil.hpp" //to remove HC tree when needed
 
 bool isNodeSetLocal(std::vector<TR::Node *> nodeSet)
 {
@@ -56,7 +57,7 @@ void WalkOverTreeIL::walkTheTreeForInfo()
     const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
     std::cout << "[" << name << "]\n";
     std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
-    //benchmark ke liye verbose conditional removed
+    // benchmark ke liye verbose conditional removed
     verbose = 1;
     // if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
     //             "processNodes", 12) == 0)
@@ -156,6 +157,43 @@ void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
             }
             std::cout << "]\n";
 
+            // // whenever you add support for HeapificationAtSTore , uncomment below block to remove redundant HC containing tree
+            // //  checking if there exists a path between any fromNode to any other toNode (might refine later)
+            // std::cout << "for a.f* = b.f* [" << node << "] checking if PATH EXISTS => ";
+            // bool foundPath = false;
+
+            // for (auto fromNode : fromNodes)
+            // {
+            //     for (auto toNode : toNodes)
+            //     {
+            //         std::unordered_set<TR::Node *> visited;
+            //         if (treeTop->_in->pathExistBetween(fromNode, toNode, visited))
+            //         {
+            //             if (treeTop->getPrevTreeTop()->getNode()->getOpCodeValue() == TR::possibleHeapificationAtStore)
+            //             {
+            //                 std::cout << " YES";
+            //                 foundPath = true;
+            //                 TR::TransformUtil::removeTree(comp, treeTop->getPrevTreeTop());
+            //             }
+            //             std::cout << " was checking is prev HeapificationAtStore for this node [" << treeTop->getPrevTreeTop()->getNode() << "]";
+            //         }
+            //         else
+            //         {
+            //             std::cout << "NO";
+            //         }
+            //         std::cout << "\n";
+            //         if (foundPath)
+            //         {
+            //             break;
+            //         }
+            //     }
+            //     if (foundPath)
+            //     {
+            //         break;
+            //     }
+            // }
+            // //HC block removal ends
+
             bool isFromNodeSetLocal = isNodeSetLocal(fromNodes);
             bool isToNodeSetLocal = isNodeSetLocal(toNodes);
             std::cout << std::boolalpha // treats 1 and 0 as true and false for this particlar stream
@@ -180,12 +218,12 @@ void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
 
             if (isFromNodeSetLocal && isToNodeSetLocal)
             {
-                std::cout<<"adding debug ctr fromToBothLocal before TreeTop(Node) "<<node <<"\n";
+                std::cout << "adding debug ctr fromToBothLocal before TreeTop(Node) " << node << "\n";
                 addDebugCounters(comp, bothLocalCtr, treeTop);
-
             }
-            else{
-                                std::cout<<"adding debug ctr FromOrToNonLocal before TreeTop(Node) "<<node <<"\n";
+            else
+            {
+                std::cout << "adding debug ctr FromOrToNonLocal before TreeTop(Node) " << node << "\n";
 
                 addDebugCounters(comp, eitherOneNonLocal, treeTop);
             }
