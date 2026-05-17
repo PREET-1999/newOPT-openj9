@@ -339,6 +339,11 @@ int32_t TR_PreetOptimization::perform()
         WalkOverTreeIL *walkTree = new WalkOverTreeIL(comp());
         walkTree->walkTheTreeForInfo();
 
+
+
+                comp()->dumpMethodTrees(log, "Trees After Preet Optimization");
+
+
         // for(;tt;tt=tt->getNextTreeTop()){
         //     printTreeTop(tt);
         // }

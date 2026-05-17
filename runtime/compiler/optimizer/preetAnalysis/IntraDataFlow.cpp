@@ -9,7 +9,6 @@
 #include "optimizer/preetAnalysis/statements/UnknownStmt.hpp"
 #include "optimizer/preetAnalysis/AuxillaryInfo.hpp"
 
-
 #include "codegen/CodeGenerator.hpp"
 #include "compile/Compilation.hpp"
 #include "control/Options.hpp"
@@ -165,10 +164,12 @@ void IntraDataFlow::shoutOutLoud(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
         // }
         break;
     };
-    case TR::ResolveCHK: //for handling 'this'
+    case TR::ResolveCHK: // for handling 'this'
+    case TR::NULLCHK:
     case TR::ResolveAndNULLCHK:
+    case TR::compressedRefs:
     {
-        TR::Node *firstChildNode = node->getFirstChild(); // since nullcheck would be its parent
+        TR::Node *firstChildNode = node->getFirstChild(); // since nullchecks/Compresedrefs would be its parent
         if (firstChildNode)
         {
             if (firstChildNode->getOpCode().isStoreIndirect()) // awrtbari
@@ -219,7 +220,7 @@ IntraDataFlow::findTreeTopType(TR::TreeTop *tt)
     if (checkIfNewStmtViaStmtInfo(tt, currentStmtInfo))
     {
         std::cout << tt->getNode() << " is AllocationStmt\n";
-        AuxillaryInfo::localAllocations[tt->getNode()->getFirstChild()]=true;
+        AuxillaryInfo::localAllocations[tt->getNode()->getFirstChild()] = true;
         return {StatementKind::AllocationStmt, currentStmtInfo};
     }
     if (checkIfStoreStmtViaStmtInfo(tt, currentStmtInfo))
@@ -270,24 +271,23 @@ bool IntraDataFlow::checkIfNewStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTabl
 
 bool IntraDataFlow::checkIfStoreStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
 {
-    bool lhsValid = 
-                    (stmtInfo->hasLHSFields());
+    bool lhsValid =
+        (stmtInfo->hasLHSFields());
 
     // bool rhsValid = (stmtInfo->rhsNewNode != nullptr);
 
     // return lhsValid && rhsValid;
 
-        return lhsValid ;
-
+    return lhsValid;
 }
 
 bool IntraDataFlow::checkIfLoadStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
 { // for now not hanling a=(new Node()).f...do I want to handle such??
-    bool lhsValid = 
-                    (!stmtInfo->hasLHSFields());
+    bool lhsValid =
+        (!stmtInfo->hasLHSFields());
 
-    bool rhsValid = 
-                    (stmtInfo->hasRHSFields());
+    bool rhsValid =
+        (stmtInfo->hasRHSFields());
 
     return lhsValid && rhsValid;
 }
@@ -298,9 +298,9 @@ bool IntraDataFlow::checkIfCopyStmtViaStmtInfo(TR::TreeTop *tt, StatementInfoTab
                     (!stmtInfo->hasLHSFields()) &&
                     (stmtInfo->lhsNewNode == nullptr);
 
-    bool rhsValid = 
-                    (!stmtInfo->hasRHSFields()) &&
-                    (stmtInfo->rhsNewNode == nullptr);
+    bool rhsValid =
+        (!stmtInfo->hasRHSFields()) &&
+        (stmtInfo->rhsNewNode == nullptr);
 
     return lhsValid && rhsValid;
 }
@@ -584,12 +584,16 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
     const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
     std::cout << "[" << name << "]\n";
     std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
-    if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
-                "processNodes", 12) == 0)
-    {
-        verbose = 1;
-        // std::cout << "Matched processNodes\n";
-    }
+    //benchmark ke liye verbose conditional removed
+    verbose = 1;
+    // if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
+    //             "processNodes", 12) == 0)
+    // {
+    //     verbose = 1;
+    //             std::cout << "#################### " <<name  <<"\n";
+
+    //     // std::cout << "Matched processNodes\n";
+    // }
 
     // if (verbose)
     //     for (treeTop; treeTop != NULL; treeTop = treeTop->getNextTreeTop())
@@ -711,8 +715,6 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         std::pair<StatementKind, StatementInfoTable *> result = findTreeTopType(treeTop);
         StatementKind sk = result.first;
         StatementInfoTable *stmtInfo = result.second;
-
-
 
         if (predTreeTop) // first treetop's in shouldnt be changed
             treeTop->_in = computeInSetFromPredecessor(predTreeTop);
@@ -894,12 +896,15 @@ void IntraDataFlow::performAnalysisOverCFG(TR::Compilation *comp)
     const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
     std::cout << "[" << name << "]\n";
     std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
-    if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
-                "processNodes", 12) == 0)
-    {
-        verbose = 1;
-        // std::cout << "Matched processNodes\n";
-    }
+    
+    //benchmark ke liye verbose conditional removed
+    verbose = 1;
+    // if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
+    //             "processNodes", 12) == 0)
+    // {
+    //     verbose = 1;
+    //     std::cout << "#################### " <<name  <<"\n";
+    // }
     // get the cfg
     TR::CFG *cfg = comp->getFlowGraph();
 
@@ -1097,13 +1102,26 @@ PTG *IntraDataFlow::mergePTG(PTG *one, PTG *another)
     for (auto stackOnePair : stackOne)
     {
         int autoSlot = stackOnePair.first;
-
+        bool isAutoSlotPointingToBottom = one->isPointsToOfKeyInStackBottom(autoSlot);
+        if (isAutoSlotPointingToBottom)
+        {
+            merged->setPointsToOfKeyInStackToBottom(autoSlot);
+            continue;
+        }
         // check if this key is also there in the another Stack
         auto stackAnother = another->_stack;
         auto anotherIt = stackAnother.find(autoSlot);
         if (anotherIt != stackAnother.end())
         {
             // key is also in another stack
+
+            bool isAutoSlotPointingToBottom = another->isPointsToOfKeyInStackBottom(autoSlot);
+            if (isAutoSlotPointingToBottom)
+            {
+                merged->setPointsToOfKeyInStackToBottom(autoSlot);
+                continue;
+            }
+
             // get the set<TR::Node*> of another set and first set
             std::set<TR::Node *> stackOneNodeSet = stackOnePair.second;
             std::set<TR::Node *> stackAnotherNodeSet = anotherIt->second;
@@ -1159,9 +1177,46 @@ PTG *IntraDataFlow::mergePTG(PTG *one, PTG *another)
     for (auto heapOnePair : heapOne)
     {
         auto objFieldPairOne = heapOnePair.first;
+
+        //{Oa,f} : objFieldPairOne
+        // check if its Oa,*
+        bool isStarField = objFieldPairOne.second == nullptr;
+
+        if (isStarField)
+        {
+            merged->setPointsToOfKeyInHeapToBottom(objFieldPairOne);
+            continue;
+        }
+        auto obj = objFieldPairOne.first;
+        // probably  * and f both wont be there for same Oa in PTG, but still checking
+        if (one->doesStarFieldFromNodeExists(obj))
+        {
+            continue;
+        }
+
+        bool isObjFieldPointingToBottom = one->isPointsToOfKeyInHeapBottom(objFieldPairOne);
+        if (isObjFieldPointingToBottom)
+        {
+            merged->setPointsToOfKeyInHeapToBottom(objFieldPairOne);
+            continue;
+        }
+
         auto heapAnotherIt = heapAnother.find(objFieldPairOne);
         if (heapAnotherIt != heapAnother.end())
         {
+
+            if (another->doesStarFieldFromNodeExists(obj))
+            {
+                continue;
+            }
+
+            bool isObjFieldPointingToBottom = another->isPointsToOfKeyInHeapBottom(objFieldPairOne);
+            if (isObjFieldPointingToBottom)
+            {
+                merged->setPointsToOfKeyInHeapToBottom(objFieldPairOne);
+                continue;
+            }
+
             std::set<TR::Node *> heapOneNodeSet = heapOnePair.second;
             std::set<TR::Node *> heapAnotherNodeSet = heapAnotherIt->second;
             std::set<TR::Node *> mergedNodeSet = heapOneNodeSet;
@@ -1189,7 +1244,11 @@ PTG *IntraDataFlow::mergePTG(PTG *one, PTG *another)
     for (auto heapAnotherPair : heapAnother)
     {
         auto objFieldPairAnother = heapAnotherPair.first;
-
+        auto obj = objFieldPairAnother.first;
+        if (merged->doesStarFieldFromNodeExists(obj))
+        {
+            continue;
+        }
         // if this is not present in merged heap, push it
         auto anotherIt = heapMerged.find(objFieldPairAnother);
         if (anotherIt == heapMerged.end())

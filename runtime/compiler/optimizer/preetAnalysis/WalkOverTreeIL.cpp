@@ -56,12 +56,15 @@ void WalkOverTreeIL::walkTheTreeForInfo()
     const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
     std::cout << "[" << name << "]\n";
     std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
-    if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
-                "processNodes", 12) == 0)
-    {
-        verbose = 1;
-        // std::cout << "Matched processNodes\n";
-    }
+    //benchmark ke liye verbose conditional removed
+    verbose = 1;
+    // if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
+    //             "processNodes", 12) == 0)
+    // {
+    //     verbose = 1;
+    //     // std::cout << "Matched processNodes\n";
+    //     std::cout << "#################### " << name << "\n";
+    // }
 
     if (verbose)
     {
@@ -80,7 +83,7 @@ void WalkOverTreeIL::walkTheTreeForInfo()
                 traverseBlock(block->getEntry(), _comp);
         }
 
-        AuxillaryInfo::printTreeTopKinds(_comp);
+        // AuxillaryInfo::printTreeTopKinds(_comp);
     }
 }
 
@@ -101,9 +104,9 @@ void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
         StatementKind sk = result.first;
         StatementInfoTable *stmtInfo = result.second;
 
-        //just dump the kindOfTreeTOp encountered via the auxilary logger
-        //this might need some check if done elseWhere, if already added in map...to avoid redundant adding: TODO
-        AuxillaryInfo::insertTreeTopKind(sk,treeTop);
+        // just dump the kindOfTreeTOp encountered via the auxilary logger
+        // this might need some check if done elseWhere, if already added in map...to avoid redundant adding: TODO
+        AuxillaryInfo::insertTreeTopKind(sk, treeTop);
 
         switch (sk)
         {
@@ -159,14 +162,33 @@ void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
                       << "isFromNodeSetLocal: " << isFromNodeSetLocal << "\n"
                       << "isToNodeSetLocal: " << isToNodeSetLocal << std::endl;
 
-            // trying to add debugCounters
-            const char *bothLocalCtr = TR::DebugCounter::debugCounterName(comp, "StoreInstance/fromToBothLocal");
-            const char *eitherOneNonLocal = TR::DebugCounter::debugCounterName(comp, "StoreInstance/FromOrToNonLocal");
+            // per method debug Counters can be done this way?
+            TR::ResolvedMethodSymbol *resolvedMethodSymbol = _comp->getMethodSymbol();
+            const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
+            std::string counterName =
+                std::string("StoreInstance") + name + "/fromToBothLocal";
+
+            const char *bothLocalCtr = TR::DebugCounter::debugCounterName(comp, counterName.c_str());
+
+            counterName =
+                std::string("StoreInstance") + name + "/FromOrToNonLocal";
+            const char *eitherOneNonLocal = TR::DebugCounter::debugCounterName(comp, counterName.c_str());
+
+            // // trying to add debugCounters
+            //         const char *bothLocalCtr = TR::DebugCounter::debugCounterName(comp, "StoreInstance/fromToBothLocal");
+            //         const char *eitherOneNonLocal = TR::DebugCounter::debugCounterName(comp, "StoreInstance/FromOrToNonLocal");
 
             if (isFromNodeSetLocal && isToNodeSetLocal)
+            {
+                std::cout<<"adding debug ctr fromToBothLocal before TreeTop(Node) "<<node <<"\n";
                 addDebugCounters(comp, bothLocalCtr, treeTop);
-            else
+
+            }
+            else{
+                                std::cout<<"adding debug ctr FromOrToNonLocal before TreeTop(Node) "<<node <<"\n";
+
                 addDebugCounters(comp, eitherOneNonLocal, treeTop);
+            }
             AuxillaryInfo::getAuxillaryLogger()->printf("xyz\n");
 
             break;

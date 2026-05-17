@@ -278,9 +278,9 @@ static const OptimizationStrategy noOptStrategyOpts[] = {
 
 static const OptimizationStrategy coldStrategyOpts[] = {
        //preet
-   {OMR::expensiveObjectAllocationGroup, OMR::Always},
+//    {OMR::expensiveObjectAllocationGroup, OMR::Always},
    // preet
-   {OMR::preetOptimization, OMR::Always},
+//    {OMR::preetOptimization, OMR::Always},
 
     { OMR::trivialDeadTreeRemoval, OMR::IfEnabled },
     { OMR::coldBlockOutlining },

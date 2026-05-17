@@ -95,6 +95,8 @@
 #include "runtime/J9Profiler.hpp"
 #include "runtime/J9Runtime.hpp"
 
+//preet
+#include<iostream>
 #define OPT_DETAILS "O^O ESCAPE ANALYSIS: "
 
 #define MAX_SIZE_FOR_ONE_CONTIGUOUS_OBJECT 2416 // Increased from 72
@@ -216,6 +218,13 @@ bool TR_EscapeAnalysis::isImmutableObject(Candidate *candidate)
 
 int32_t TR_EscapeAnalysis::perform()
 {
+    //preet
+    TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp()->getMethodSymbol();
+    const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
+    std::cout<<"Triggered EA for "<<name <<" with hotness [" <<comp()->getHotnessName() <<"]\n";
+    //end preet
+
+
     if (comp()->isOptServer() && (comp()->getMethodHotness() <= warm))
         return 0;
 
