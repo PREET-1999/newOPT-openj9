@@ -42,7 +42,17 @@
 #include <iostream>
 #include "IntraDataFlow.hpp"
 #include "StatementInfoTable.hpp"
+
+// for finding issue of why dataflow not terminating
+#include <fstream>
+#include <string>
 using namespace std;
+
+std::set<std::string> IntraDataFlow::failedMethods;
+
+// preet
+const char *currentMethodName = "soon...";
+// #define cout cout << "[" << currentMethodName << "] "
 
 void IntraDataFlow::nodeDFS(TR::Node *node, StatementInfoTable *stmtInfo, bool forLhs)
 {
@@ -62,19 +72,29 @@ void IntraDataFlow::nodeDFS(TR::Node *node, StatementInfoTable *stmtInfo, bool f
     // // }
 
     // the fix to only explore further the nodes whose opcode is of interest
-    TR::Node *child = node->getChild(0);
-    if (child && (child->getOpCodeValue() == TR::aload || child->getOpCodeValue() == TR::aloadi || child->getOpCodeValue() == TR::New))
+    // if(! (node->getNumChildren()>=1) )
+    // return; //this return is buggy as it wont process the curretn node's opcode as it is not going top below switch
+    // the fix might look like below?
+
+    if (node->getNumChildren() >= 1)
     {
-        std::cout << "from nodeDFS(" << node << ") calling nodeDFS(" << child << ")\n";
-        nodeDFS(child, stmtInfo, forLhs);
-    }
-    else
-    {
-        if (child)
+        TR::Node *child = node->getChild(0);
+        std::cout << node << " ks child is " << child << "\n";
+        if (child && (child->getOpCodeValue() == TR::aload || child->getOpCodeValue() == TR::aloadi || child->getOpCodeValue() == TR::New))
         {
-            std::cout << "nodeDFS mein aage nodeDFS call nai huaa for node " << node << "\n";
+            std::cout << "from nodeDFS(" << node << ") calling nodeDFS(" << child << ")\n";
+            nodeDFS(child, stmtInfo, forLhs);
+        }
+        else
+        {
+            if (child)
+            {
+                std::cout << "nodeDFS mein aage nodeDFS call nai huaa for node " << node << "\n";
+            }
         }
     }
+
+    std::cout << " shoutOUtLoud mein switch ke uper " << node << "\n";
     switch (node->getOpCodeValue())
     {
     case TR::aload:
@@ -582,9 +602,9 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
     TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp->getMethodSymbol();
 
     const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
-    std::cout << "[" << name << "]\n";
-    std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
-    //benchmark ke liye verbose conditional removed
+    // std::cout << "[" << name << "]\n";
+    // std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
+    // benchmark ke liye verbose conditional removed
     verbose = 1;
     // if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
     //             "processNodes", 12) == 0)
@@ -894,10 +914,44 @@ void IntraDataFlow::performAnalysisOverCFG(TR::Compilation *comp)
     TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp->getMethodSymbol();
     int verbose = 0;
     const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
+    currentMethodName = name;
+
+    // for debugging why not terminating for some methods
+    TR_ResolvedMethod *resolvedMethod =
+        resolvedMethodSymbol->getResolvedMethod();
+
+    // Class name
+    std::string classNameStr(
+        resolvedMethod->classNameChars(),
+        resolvedMethod->classNameLength());
+
+    // Replace '/' with '_'
+    std::replace(classNameStr.begin(),
+                 classNameStr.end(),
+                 '/',
+                 '_');
+
+    // Method name
+    std::string methodNameStr(
+        resolvedMethod->nameChars(),
+        resolvedMethod->nameLength());
+
+    // Final filename
+    std::string fileName =
+        classNameStr + "_" + methodNameStr + ".log";
+
+    std::ofstream outFile(fileName);
+
+    // Save original buffer
+    std::streambuf *originalCoutBuffer = std::cout.rdbuf();
+
+    // Redirect std::cout to file
+    std::cout.rdbuf(outFile.rdbuf());
+
     std::cout << "[" << name << "]\n";
-    std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
-    
-    //benchmark ke liye verbose conditional removed
+    std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "*****\n";
+
+    // benchmark ke liye verbose conditional removed
     verbose = 1;
     // if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
     //             "processNodes", 12) == 0)
@@ -1050,6 +1104,8 @@ void IntraDataFlow::performAnalysisOverCFG(TR::Compilation *comp)
             }
         }
     }
+    // Restore original cout buffer
+    std::cout.rdbuf(originalCoutBuffer);
 }
 
 PTG *IntraDataFlow::mergePTG(PTG *one, PTG *another)

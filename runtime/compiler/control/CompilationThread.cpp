@@ -28,6 +28,10 @@
 #else
 #define J9OS_STRNCMP strncmp
 #endif
+//preet
+#include<iostream> //to check whether I can print the heaplimited crashed method
+#include "optimizer/preetAnalysis/IntraDataFlow.hpp"
+
 
 #include "control/CompilationThread.hpp"
 
@@ -2186,6 +2190,15 @@ bool TR::CompilationInfo::shouldRetryCompilation(J9VMThread *vmThread, TR_Method
                 case compilationLowPhysicalMemory:
                 case compilationInternalPointerExceedLimit:
                 case compilationVirtualAddressExhaustion:
+                    //preet
+                    if(entry->_compErrCode == compilationHeapLimitExceeded){
+                        TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp->getMethodSymbol();
+                        const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
+                        const char *signature = resolvedMethodSymbol->getResolvedMethod()->signatureChars();
+                        std::cout<<"HEAP ISSUE for " <<name <<"\n";
+                        IntraDataFlow::failedMethods.insert(signature);
+
+                    }
                     if (comp->getOption(TR_Timing)) {
                         comp->phaseTimer().DumpSummary(*comp);
                     }

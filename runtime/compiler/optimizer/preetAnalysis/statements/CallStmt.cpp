@@ -60,6 +60,12 @@ PTG *CallStmt::Gen()
         //  }
         // initial version ends here
 
+        //if nodeFromArg points to bottom, no need to add to heap
+        if(nodeFromArg == nullptr)
+            continue;
+
+
+
         TR::SymbolReference *starField = nullptr;
         TR::Node *bottom = nullptr;
         std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {nodeFromArg, starField};

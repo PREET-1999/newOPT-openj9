@@ -107,7 +107,7 @@ void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
 
         // just dump the kindOfTreeTOp encountered via the auxilary logger
         // this might need some check if done elseWhere, if already added in map...to avoid redundant adding: TODO
-        AuxillaryInfo::insertTreeTopKind(sk, treeTop);
+        // AuxillaryInfo::insertTreeTopKind(sk, treeTop);
 
         switch (sk)
         {
@@ -227,7 +227,7 @@ void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
 
                 addDebugCounters(comp, eitherOneNonLocal, treeTop);
             }
-            AuxillaryInfo::getAuxillaryLogger()->printf("xyz\n");
+            // AuxillaryInfo::getAuxillaryLogger()->printf("xyz\n");
 
             break;
         }

@@ -42,11 +42,20 @@ PTG *LoadStmt::Gen()
             return genPTG;
         }
 
-        if (_tt->_in->isPointsToOfKeyInStackBottom(lhsAuto))
-        {
-            // do nothing
-            return genPTG;
-        }
+        //after debugging DaCapo, (not sure why I added this......think more later)
+        //this ideally returns the gen to be _|_ , and kill would kill the a -> bottom(of in) 
+        //..and so out would be null set if stmt is a = some.foo();
+        //while "looping" back to it, since already first iter stored in as a -> bottom
+        //2nd iter will create no gen as explained above, and its out will be empty...wrong
+        //This might affect other statements, where Ive done this, as of now just commenting for load
+        // if (_tt->_in->isPointsToOfKeyInStackBottom(lhsAuto))
+        // {
+        //     // do nothing
+        //     return genPTG;
+        // }
+
+
+
         // lhsAuto isnt pointing to bottom for sure( can point to nothing or an actualo obj)
         if (_stmtInfo->isThis(rhsAuto))
         {
@@ -196,14 +205,14 @@ PTG *LoadStmt::Gen()
 
 PTG *LoadStmt::Kill()
 {
-    std::cout << "in kill the initial inset is\n";
+    std::cout << "in kill\n";
 
     // call the to-be made API to get auto
     int autoLHS = getlhsAuto();
 
     PTG *killPTG = KillSetPostStrongUpdate(autoLHS, _tt->_in);
     // cout<<"ObjAllocatuion KILL\n";
-    // killPTG->printStack();
+    killPTG->printStack();
     // killPTG->printHeap();
 
     return killPTG;
@@ -212,7 +221,7 @@ PTG *LoadStmt::Kill()
 PTG *LoadStmt::SetDiff(PTG *kill)
 {
 
-    std::cout << "SetDiff trial\n";
+    std::cout << "SetDiff\n";
 
     PTG *copyIn = new PTG();
     copyIn->_stack = _tt->_in->_stack;
@@ -229,7 +238,7 @@ PTG *LoadStmt::SetDiff(PTG *kill)
             copyIn->_stack.erase(keyFoundIt);
         }
     }
-    // copyIn->printStack();
+    copyIn->printStack();
     return copyIn;
 }
 

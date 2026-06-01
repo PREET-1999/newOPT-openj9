@@ -244,6 +244,15 @@ void printCFGNode(TR::CFGNode *cfgNode)
 
 int32_t TR_PreetOptimization::perform()
 {
+    TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp()->getMethodSymbol();
+    const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
+    const char *signature = resolvedMethodSymbol->getResolvedMethod()->signatureChars();
+    if (IntraDataFlow::failedMethods.count(signature))
+    {
+        // exists
+        std::cout<<" Skipping Preet Optimization for " <<name <<"\n" ;
+        return 0;
+    }
     countOptimizationInvoked++;
     OMR::Logger *log = comp()->log();
 
@@ -260,21 +269,22 @@ int32_t TR_PreetOptimization::perform()
         TR::ResolvedMethodSymbol *resolvedMethodSymbol = compilation->getMethodSymbol();
         TR_ResolvedMethod *resolvedMethod = resolvedMethodSymbol->getResolvedMethod();
 
-        // creating a log file which should contain dataFlow related Auxillary Info
-        std::string classNameStr(
-            resolvedMethod->classNameChars(),
-            resolvedMethod->classNameLength());
-        std::replace(classNameStr.begin(), classNameStr.end(), '/', '_');
+        // aux logger related
+        //  creating a log file which should contain dataFlow related Auxillary Info
+        //  std::string classNameStr(
+        //      resolvedMethod->classNameChars(),
+        //      resolvedMethod->classNameLength());
+        //  std::replace(classNameStr.begin(), classNameStr.end(), '/', '_');
 
-        std::string methodNameStr(
-            resolvedMethod->nameChars(),
-            resolvedMethod->nameLength());
+        // std::string methodNameStr(
+        //     resolvedMethod->nameChars(),
+        //     resolvedMethod->nameLength());
 
-        std::string fileName = classNameStr + "_" + methodNameStr + ".log";
+        // std::string fileName = classNameStr + "_" + methodNameStr + ".log";
 
-        OMR::Logger *auxLogger =
-            OMR::TRIOStreamLogger::create(comp()->trPersistentMemory(),
-                                          fileName.c_str());
+        // OMR::Logger *auxLogger =
+        //     OMR::TRIOStreamLogger::create(comp()->trPersistentMemory(),
+        //                                   fileName.c_str());
         // auxLogger->printf("Class Name:%s", className);
         // auxLogger->printf("Method Name:%s", methodName);
         // auxLogger->printf("Class Name len:%d", resolvedMethod->classNameLength());
@@ -282,15 +292,16 @@ int32_t TR_PreetOptimization::perform()
         // auxLogger->printf("Class Name:%.*s Method Name:%.*s\n",
         //                   resolvedMethod->classNameLength(), className,
         //                   resolvedMethod->nameLength(), methodName);
-        auxLogger->printf("hi\n");
-        AuxillaryInfo::setAuxillaryLogger(auxLogger);
+        // auxLogger->printf("hi\n");
+        // AuxillaryInfo::setAuxillaryLogger(auxLogger);
 
-        AuxillaryInfo::getAuxillaryLogger()->printf("bye\n");
+        // AuxillaryInfo::getAuxillaryLogger()->printf("bye\n");
         //--end log file related logic ---
 
         TR::TreeTop *tt = resolvedMethodSymbol->getFirstTreeTop();
 
-        comp()->getDebug()->print(auxLogger,tt->getNextTreeTop());
+        // auxlogger related
+        //  comp()->getDebug()->print(auxLogger,tt->getNextTreeTop());
         TR::TreeTop *head = tt; // to keep the original tt stored
         // finding type of treetops like new load store
         // logprints(trace(), log, " Finding treeTop type \n");
@@ -339,10 +350,7 @@ int32_t TR_PreetOptimization::perform()
         WalkOverTreeIL *walkTree = new WalkOverTreeIL(comp());
         walkTree->walkTheTreeForInfo();
 
-
-
-                comp()->dumpMethodTrees(log, "Trees After Preet Optimization");
-
+        comp()->dumpMethodTrees(log, "Trees After Preet Optimization");
 
         // for(;tt;tt=tt->getNextTreeTop()){
         //     printTreeTop(tt);

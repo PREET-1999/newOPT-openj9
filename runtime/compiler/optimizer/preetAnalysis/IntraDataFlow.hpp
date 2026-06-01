@@ -3,6 +3,8 @@
 // #include "optimizer/preetAnalysis/Treetop.hpp"
 #include "il/TreeTop.hpp"
 #include <map>
+#include<set>
+
 enum class StatementKind;
 namespace TR
 {
@@ -43,6 +45,9 @@ public:
   std::map<int,int> globalNodeMap;
   void shoutOutLoud(TR::TreeTop* tt,StatementInfoTable* stmtInfo);
   void nodeDFS(TR::Node* node,StatementInfoTable* stmtInfo,bool forLhs);
+
+  static std::set<std::string> failedMethods;
+
 };
 
 #endif

@@ -43,12 +43,13 @@ PTG *CopyStmt::Gen()
             // do nothing
             return genPTG;
         }
-
-        if (_tt->_in->isPointsToOfKeyInStackBottom(lhsAuto))
-        {
-            // do nothing
-            return genPTG;
-        }
+        //This did affect other statements(copy stmt here), where initially had just commentedfor load
+        //now commenting this too
+        // if (_tt->_in->isPointsToOfKeyInStackBottom(lhsAuto))
+        // {
+        //     // do nothing
+        //     return genPTG;
+        // }
 
         // lhsAuto isnt pointing to bottom for sure( can point to nothing or an actualo obj)
 
