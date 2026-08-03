@@ -42,7 +42,12 @@ public:
   bool shouldPushSuccessorsBasedOnOutSets(int blockNumber, PTG *oldOut, PTG* newOut);
 
   //in process to byuild general findTreeTop
-  std::map<int,int> globalNodeMap;
+  std::map<int,std::set<TR::Node*>> globalNumberToNodeMap;
+  std::set<TR::Node *>processLoadNode(TR::Node *node,PTG *in);
+  void processStoreNode(TR::Node *node,PTG *in,PTG* tempOut);
+  TR::Node* processCallNode(TR::Node *node,PTG *in,PTG* tempOut); //as of now just returning a node(for store to intercept as *) 
+  TR::Node* processNewNode(TR::Node *node,PTG *in,PTG* tempOut); //as of now just returning a node(for store to intercept as *) 
+
   void shoutOutLoud(TR::TreeTop* tt,StatementInfoTable* stmtInfo);
   void nodeDFS(TR::Node* node,StatementInfoTable* stmtInfo,bool forLhs);
 

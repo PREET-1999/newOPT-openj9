@@ -108,6 +108,8 @@ PTG *LoadStmt::Gen()
         {
             genPTG->insertIntoStack(lhsAuto, node);
         }
+        std::cout<<"Gen Load \n";
+        genPTG->printStack();
         return genPTG;
     }
 
@@ -197,8 +199,10 @@ PTG *LoadStmt::Gen()
 
     //     genPTG->insertIntoStack(lhsAuto, node);
     // }
-    // genPTG->printStack();
-    // genPTG->printHeap();
+       std::cout<<" [ LOAD : GEN ]\n";
+    genPTG->printStack();
+    genPTG->printHeap();
+    std::cout<<" [ ---LOAD : GEN----- ]\n";
 
     return genPTG;
 }
@@ -214,6 +218,11 @@ PTG *LoadStmt::Kill()
     // cout<<"ObjAllocatuion KILL\n";
     killPTG->printStack();
     // killPTG->printHeap();
+
+       std::cout<<" [ LOAD : KILL ]\n";
+    killPTG->printStack();
+    killPTG->printHeap();
+    std::cout<<" [ ---LOAD : KILL----- ]\n";
 
     return killPTG;
 }

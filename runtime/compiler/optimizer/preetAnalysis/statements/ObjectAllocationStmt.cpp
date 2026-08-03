@@ -62,7 +62,12 @@ PTG *ObjectAllocationStmt::Gen()
     TR::Node* newNode = getNewNode();
     std::cout<<"[New]node " <<newNode <<"\n";
     genPTG->insertIntoStack(autoLHS, newNode);
+
+    std::cout<<" [ NEW : GEN ]\n";
     genPTG->printStack();
+    genPTG->printHeap();
+    std::cout<<" [ ---NEW : GEN----- ]\n";
+
 
     return genPTG;
 }
@@ -81,7 +86,13 @@ PTG *ObjectAllocationStmt::Kill()
     // killPTG->printStack();
     // killPTG->printHeap();
 
+       std::cout<<" [ NEW : KILL ]\n";
+    killPTG->printStack();
+    killPTG->printHeap();
+    std::cout<<" [ ---NEW : KILL----- ]\n";
+
     return killPTG;
+
 }
 
 PTG *ObjectAllocationStmt::SetDiff(PTG *kill)

@@ -29,6 +29,7 @@ PTG *StoreStmt::Gen()
     - Is lhsBase.f..(n - 1 ) or fromNodes tak any of it pointing to bottom
     - Is lhsBase.f..(n - 1 ) or fromNodes poining to actual obj
 
+    - Is rhsBase a newNode
     - Is rhsBase this
     - Is rhsBase param
     - Is rhsBase pointing to bottom
@@ -75,6 +76,18 @@ PTG *StoreStmt::Gen()
         {
             if (node == nullptr) // can you have a routine isBOttom rather than direct nullptr
                 return genPTG;
+        }
+
+        if (_stmtInfo->rhsNewNode)
+        {
+            std::set<TR::Node *> newNodes = getNodeToBeStoredIntoBase(); // would only be size 1
+            for (auto fromNode : fromNodes)
+            {
+                std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
+                for (auto newNode : newNodes)
+                    genPTG->insertIntoHeap(NodeObjectField, newNode);
+            }
+            return genPTG;
         }
 
         if (_stmtInfo->isThis(rhsAuto))
@@ -147,198 +160,202 @@ PTG *StoreStmt::Gen()
                 genPTG->insertIntoHeap(NodeObjectField, b);
             }
         }
+        std::cout<<" [ STORE : GEN ]\n";
+    genPTG->printStack();
+    genPTG->printHeap();
+    std::cout<<" [ ---STORE : GEN----- ]\n";
         return genPTG;
     }
 
-//     int lhsAuto = getlhsAuto();
-//     int rhsAuto = getrhsAuto();
-//     /*
-//    Handling this and param cases before proceeding further
-//    */
+    //     int lhsAuto = getlhsAuto();
+    //     int rhsAuto = getrhsAuto();
+    //     /*
+    //    Handling this and param cases before proceeding further
+    //    */
 
-//     if (lhsAuto == -1) // its a param (this=b.f -> wrong   'this' isnt alowed to be assigned)
-//     {
-//         return genPTG;
-//     }
+    //     if (lhsAuto == -1) // its a param (this=b.f -> wrong   'this' isnt alowed to be assigned)
+    //     {
+    //         return genPTG;
+    //     }
 
-//     if (rhsAuto == -1)
-//     {
+    //     if (rhsAuto == -1)
+    //     {
 
-//         TR::SymbolReference *f = getSymRef();
+    //         TR::SymbolReference *f = getSymRef();
 
-//         std::vector<TR::Node *> fromNodes;
-//         std::set<TR::Node *> baseNode = getNodePointedByBase();
-//         for (auto node : baseNode)
-//         {
-//             if (_stmtInfo->lhsFieldStack.size() == 1)
-//             {
-//                 fromNodes.push_back(node);
-//             }
-//             else
-//             {
-//                 _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
-//             }
-//         }
-//         TR::Node *bottom = nullptr;
-//         for (auto fromNode : fromNodes)
-//         {
-//             std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
-//             genPTG->insertIntoHeap(NodeObjectField, bottom);
-//         }
+    //         std::vector<TR::Node *> fromNodes;
+    //         std::set<TR::Node *> baseNode = getNodePointedByBase();
+    //         for (auto node : baseNode)
+    //         {
+    //             if (_stmtInfo->lhsFieldStack.size() == 1)
+    //             {
+    //                 fromNodes.push_back(node);
+    //             }
+    //             else
+    //             {
+    //                 _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
+    //             }
+    //         }
+    //         TR::Node *bottom = nullptr;
+    //         for (auto fromNode : fromNodes)
+    //         {
+    //             std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
+    //             genPTG->insertIntoHeap(NodeObjectField, bottom);
+    //         }
 
-//         // no further processing needed
-//         return genPTG;
-//     }
-//     /*
-//         Done handling this and param cases
-//     */
+    //         // no further processing needed
+    //         return genPTG;
+    //     }
+    //     /*
+    //         Done handling this and param cases
+    //     */
 
-//     std::set<TR::Node *> baseNode = getNodePointedByBase();
-//     std::set<TR::Node *> storedNode = getNodeToBeStoredIntoBase();
-//     TR::SymbolReference *f = getSymRef();
+    //     std::set<TR::Node *> baseNode = getNodePointedByBase();
+    //     std::set<TR::Node *> storedNode = getNodeToBeStoredIntoBase();
+    //     TR::SymbolReference *f = getSymRef();
 
-//     std::cout << "genPTG heap before inserting...\n";
-//     genPTG->printHeap();
+    //     std::cout << "genPTG heap before inserting...\n";
+    //     genPTG->printHeap();
 
-//     // int lhsAuto = getlhsAuto();
+    //     // int lhsAuto = getlhsAuto();
 
-//     bool isObjPointedByLhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(lhsAuto);
-//     if (isObjPointedByLhsBottom)
-//     {
-//         // no processing neeedded
-//         return genPTG;
-//     }
+    //     bool isObjPointedByLhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(lhsAuto);
+    //     if (isObjPointedByLhsBottom)
+    //     {
+    //         // no processing neeedded
+    //         return genPTG;
+    //     }
 
-//     std::set<TR::Node *> nodeSetOfLhs = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
-//     for (auto node : nodeSetOfLhs)
-//     {
-//         if (_tt->_in->doesStarFieldFromNodeExists(node))
-//         {
-//             // no need to add anything to heap and no further processing
-//             return genPTG;
-//         }
-//     }
+    //     std::set<TR::Node *> nodeSetOfLhs = _tt->_in->getNodeSetForKeyInStack(lhsAuto);
+    //     for (auto node : nodeSetOfLhs)
+    //     {
+    //         if (_tt->_in->doesStarFieldFromNodeExists(node))
+    //         {
+    //             // no need to add anything to heap and no further processing
+    //             return genPTG;
+    //         }
+    //     }
 
-//     std::vector<TR::Node *> fromNodes;
-//     std::cout << "lhs fieldStack [\n";
-//     for (auto field : _stmtInfo->lhsFieldStack)
-//     {
-//         int32_t index = field->getCPIndex();
-//         std::cout << index << " ";
-//     }
-//     std::cout << "]\n";
-//     for (auto node : baseNode)
-//     {
-//         if (_stmtInfo->lhsFieldStack.size() == 1)
-//         {
-//             fromNodes.push_back(node);
-//         }
-//         else
-//         {
-//             _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
-//         }
-//     }
+    //     std::vector<TR::Node *> fromNodes;
+    //     std::cout << "lhs fieldStack [\n";
+    //     for (auto field : _stmtInfo->lhsFieldStack)
+    //     {
+    //         int32_t index = field->getCPIndex();
+    //         std::cout << index << " ";
+    //     }
+    //     std::cout << "]\n";
+    //     for (auto node : baseNode)
+    //     {
+    //         if (_stmtInfo->lhsFieldStack.size() == 1)
+    //         {
+    //             fromNodes.push_back(node);
+    //         }
+    //         else
+    //         {
+    //             _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
+    //         }
+    //     }
 
-//     std::cout << "a.f..f ki isse -> jayega ->  [ ";
-//     for (auto node : fromNodes)
-//     {
-//         std::cout << node << " ";
-//     }
-//     std::cout << "]\n";
+    //     std::cout << "a.f..f ki isse -> jayega ->  [ ";
+    //     for (auto node : fromNodes)
+    //     {
+    //         std::cout << node << " ";
+    //     }
+    //     std::cout << "]\n";
 
-//     // check if bottom is present, if yes no further processing needed
-//     for (auto node : fromNodes)
-//     {
-//         if (node == nullptr) // can you have a routine isBOttom rather than direct nullptr
-//             return genPTG;
-//     }
+    //     // check if bottom is present, if yes no further processing needed
+    //     for (auto node : fromNodes)
+    //     {
+    //         if (node == nullptr) // can you have a routine isBOttom rather than direct nullptr
+    //             return genPTG;
+    //     }
 
-//     // check if b->bottom ? (a.f=b)
-//     bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
-//     if (isObjPointedByRhsBottom)
-//     {
+    //     // check if b->bottom ? (a.f=b)
+    //     bool isObjPointedByRhsBottom = _tt->_in->isPointsToOfKeyInStackBottom(rhsAuto);
+    //     if (isObjPointedByRhsBottom)
+    //     {
 
-//         TR::Node *bottom = nullptr;
-//         for (auto fromNode : fromNodes)
-//         {
-//             std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
-//             genPTG->insertIntoHeap(NodeObjectField, bottom);
-//         }
-//         return genPTG;
-//     }
+    //         TR::Node *bottom = nullptr;
+    //         for (auto fromNode : fromNodes)
+    //         {
+    //             std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
+    //             genPTG->insertIntoHeap(NodeObjectField, bottom);
+    //         }
+    //         return genPTG;
+    //     }
 
-//     std::vector<TR::Node *> toNodes;
-//     std::cout << "rhs fieldStack [\n";
-//     for (auto field : _stmtInfo->rhsFieldStack)
-//     {
-//         int32_t index = field->getCPIndex();
-//         std::cout << index << " ";
-//     }
-//     std::cout << "]\n";
-//     for (auto node : storedNode)
-//     {
-//         if (_stmtInfo->rhsFieldStack.size() == 0)
-//         {
-//             toNodes.push_back(node);
-//         }
-//         else
-//         {
-//             _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
-//         }
-//     }
+    //     std::vector<TR::Node *> toNodes;
+    //     std::cout << "rhs fieldStack [\n";
+    //     for (auto field : _stmtInfo->rhsFieldStack)
+    //     {
+    //         int32_t index = field->getCPIndex();
+    //         std::cout << index << " ";
+    //     }
+    //     std::cout << "]\n";
+    //     for (auto node : storedNode)
+    //     {
+    //         if (_stmtInfo->rhsFieldStack.size() == 0)
+    //         {
+    //             toNodes.push_back(node);
+    //         }
+    //         else
+    //         {
+    //             _tt->_in->findNodes(node, _stmtInfo->rhsFieldStack, 0, _stmtInfo->rhsFieldStack.size() - 1, toNodes);
+    //         }
+    //     }
 
-//     // check if bottom is present, if yes "fromNode".f -> _|_
-//     for (auto node : toNodes)
-//     {
+    //     // check if bottom is present, if yes "fromNode".f -> _|_
+    //     for (auto node : toNodes)
+    //     {
 
-//         if (node == nullptr)
-//         {
-//             TR::Node *bottom = nullptr;
-//             for (auto fromNode : fromNodes)
-//             {
-//                 std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
-//                 genPTG->insertIntoHeap(NodeObjectField, bottom);
-//             }
-//             return genPTG;
-//         }
-//     }
+    //         if (node == nullptr)
+    //         {
+    //             TR::Node *bottom = nullptr;
+    //             for (auto fromNode : fromNodes)
+    //             {
+    //                 std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {fromNode, f};
+    //                 genPTG->insertIntoHeap(NodeObjectField, bottom);
+    //             }
+    //             return genPTG;
+    //         }
+    //     }
 
-//     std::cout << "a.f..f ki ispe -> aaayega ->  [ ";
-//     for (auto node : toNodes)
-//     {
-//         std::cout << node << " ";
-//     }
-//     std::cout << "]\n";
-//     // inserting into heap [fronMode,f]={toNode}
-//     for (auto a : fromNodes)
-//     {
-//         TR::Symbol *sym = a->getSymbol();
-//         if (sym->isLocalObject())
-//             std::cout << "Node " << a << " is local object\n";
-//         for (auto b : toNodes)
-//         {
-//             /*
-//                 SymbolReference* f = new SymbolReference("f");
-//                 pair<Node*,SymbolReference*> NodeObjectField = {n3,f};
-//             */
-//             std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {a, f};
-//             genPTG->insertIntoHeap(NodeObjectField, b);
+    //     std::cout << "a.f..f ki ispe -> aaayega ->  [ ";
+    //     for (auto node : toNodes)
+    //     {
+    //         std::cout << node << " ";
+    //     }
+    //     std::cout << "]\n";
+    //     // inserting into heap [fronMode,f]={toNode}
+    //     for (auto a : fromNodes)
+    //     {
+    //         TR::Symbol *sym = a->getSymbol();
+    //         if (sym->isLocalObject())
+    //             std::cout << "Node " << a << " is local object\n";
+    //         for (auto b : toNodes)
+    //         {
+    //             /*
+    //                 SymbolReference* f = new SymbolReference("f");
+    //                 pair<Node*,SymbolReference*> NodeObjectField = {n3,f};
+    //             */
+    //             std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {a, f};
+    //             genPTG->insertIntoHeap(NodeObjectField, b);
 
-//             // checking for local allocation
+    //             // checking for local allocation
 
-//             TR::Symbol *sym = b->getSymbol();
-//             if (sym->isLocalObject())
+    //             TR::Symbol *sym = b->getSymbol();
+    //             if (sym->isLocalObject())
 
-//                 std::cout << "Node " << b << " is local object\n";
-//         }
-//     }
-//     std::cout << "genPTG heap....\n";
-//     genPTG->printHeap();
+    //                 std::cout << "Node " << b << " is local object\n";
+    //         }
+    //     }
+    //     std::cout << "genPTG heap....\n";
+    //     genPTG->printHeap();
 
-//     //======> lhs.f=rhs
-//     // 1. get the set<Node*> of the [auto of lhs] present in _stack
-//     // 2. check which symbol reference will you store (of which node? ... maybe its awrtbar's but still check )
-//     // 3. get the set<Node*>  of [auto of rhs] present in _stack
+    //     //======> lhs.f=rhs
+    //     // 1. get the set<Node*> of the [auto of lhs] present in _stack
+    //     // 2. check which symbol reference will you store (of which node? ... maybe its awrtbar's but still check )
+    //     // 3. get the set<Node*>  of [auto of rhs] present in _stack
 
     return genPTG;
 }
@@ -372,35 +389,42 @@ PTG *StoreStmt::Kill()
             isObjPointedByRhsBottom = true;
         }
     }
-    if (isObjPointedByRhsBottom || _stmtInfo->rhsAuto == -1) // this or param also means rhs pointsTo Bottom
+    // only if rhs is not a new Node, then will the check of 'this or param also means rhs pointsTo Bottom' be right to kill previous points to
+    if (!(_stmtInfo->rhsNewNode))
     {
-        // kill previous as anyways bottom will be added
-        std::set<TR::Node *> baseNodes = getNodePointedByBase();
-        std::vector<TR::Node *> fromNodes;
-        for (auto node : baseNodes)
+        if (isObjPointedByRhsBottom || _stmtInfo->rhsAuto == -1) // this or param also means rhs pointsTo Bottom
         {
-            if (_stmtInfo->lhsFieldStack.size() == 1)
+            // kill previous as anyways bottom will be added
+            std::set<TR::Node *> baseNodes = getNodePointedByBase();
+            std::vector<TR::Node *> fromNodes;
+            for (auto node : baseNodes)
             {
-                fromNodes.push_back(node);
+                if (_stmtInfo->lhsFieldStack.size() == 1)
+                {
+                    fromNodes.push_back(node);
+                }
+                else
+                {
+                    _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
+                }
             }
-            else
+            TR::SymbolReference *f = getSymRef();
+            for (auto fromNode : fromNodes)
             {
-                _tt->_in->findNodes(node, _stmtInfo->lhsFieldStack, 0, _stmtInfo->lhsFieldStack.size() - 2, fromNodes);
-            }
-        }
-        TR::SymbolReference *f = getSymRef();
-        for (auto fromNode : fromNodes)
-        {
 
-            std::set<TR::Node *> nodeSet = _tt->_in->getNodeSetForKeyInHeap(std::pair<TR::Node *, TR::SymbolReference *>{fromNode, f});
-            for (auto node : nodeSet)
-            {
-                killPTG->insertIntoHeap(std::pair<TR::Node *, TR::SymbolReference *>{fromNode, f}, node);
+                std::set<TR::Node *> nodeSet = _tt->_in->getNodeSetForKeyInHeap(std::pair<TR::Node *, TR::SymbolReference *>{fromNode, f});
+                for (auto node : nodeSet)
+                {
+                    killPTG->insertIntoHeap(std::pair<TR::Node *, TR::SymbolReference *>{fromNode, f}, node);
+                }
             }
         }
     }
-    std::cout << "[StoreStmt] Kill\n";
+           std::cout<<" [ STORE : KILL ]\n";
+    killPTG->printStack();
     killPTG->printHeap();
+    std::cout<<" [ ---STORE : KILL----- ]\n";
+
     return killPTG;
 }
 

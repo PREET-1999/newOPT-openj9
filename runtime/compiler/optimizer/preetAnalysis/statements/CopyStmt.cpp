@@ -78,7 +78,6 @@ PTG *CopyStmt::Gen()
         {
             genPTG->insertIntoStack(lhsAuto, toNode);
         }
-        return genPTG;
     }
 
     // // first get the set<Node*>pointed by 1
@@ -106,6 +105,10 @@ PTG *CopyStmt::Gen()
     // genPTG->printStack();
     // genPTG->printHeap();
 
+           std::cout<<" [ COPY : GEN ]\n";
+    genPTG->printStack();
+    genPTG->printHeap();
+    std::cout<<" [ ---COPY : GEN----- ]\n";
     return genPTG;
 }
 
@@ -121,6 +124,11 @@ PTG *CopyStmt::Kill()
     // killPTG->printStack();
     // killPTG->printHeap();
 
+
+       std::cout<<" [ COPY : KILL ]\n";
+    killPTG->printStack();
+    killPTG->printHeap();
+    std::cout<<" [ ---COPY : KILL----- ]\n";
     return killPTG;
 }
 

@@ -30,6 +30,9 @@
 #include "optimizer/preetAnalysis/AuxillaryInfo.hpp"
 #include "optimizer/TransformUtil.hpp" //to remove HC tree when needed
 
+// for logging treeTops that tranfered in to out directly( but shouldnt / should have)
+#include <fstream>
+#include <string>
 bool isNodeSetLocal(std::vector<TR::Node *> nodeSet)
 {
 
@@ -58,14 +61,47 @@ void WalkOverTreeIL::walkTheTreeForInfo()
     std::cout << "[" << name << "]\n";
     std::cout << "resolvedMethodSymbol->getResolvedMethod()->nameChars() " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << "\n";
     // benchmark ke liye verbose conditional removed
-    verbose = 1;
-    // if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
-    //             "processNodes", 12) == 0)
-    // {
-    //     verbose = 1;
-    //     // std::cout << "Matched processNodes\n";
-    //     std::cout << "#################### " << name << "\n";
-    // }
+    // verbose = 1;
+    if (strncmp(resolvedMethodSymbol->getResolvedMethod()->nameChars(),
+                "processNodes", 12) == 0)
+    {
+        verbose = 1;
+        // std::cout << "Matched processNodes\n";
+        std::cout << "#################### " << name << "\n";
+    }
+
+    // for logging sucpicious treeTops
+    TR_ResolvedMethod *resolvedMethod =
+        resolvedMethodSymbol->getResolvedMethod();
+
+    // Class name
+    std::string classNameStr(
+        resolvedMethod->classNameChars(),
+        resolvedMethod->classNameLength());
+
+    // Replace '/' with '_'
+    std::replace(classNameStr.begin(),
+                 classNameStr.end(),
+                 '/',
+                 '_');
+
+    // Method name
+    std::string methodNameStr(
+        resolvedMethod->nameChars(),
+        resolvedMethod->nameLength());
+
+    // Final filename
+    std::string fileName =
+        classNameStr + "_" + methodNameStr + "_SCAN.log";
+
+    std::ofstream outFile(fileName);
+
+    // Save original buffer
+    std::streambuf *originalCoutBuffer = std::cout.rdbuf();
+
+    // Redirect std::cout to file
+    std::cout.rdbuf(outFile.rdbuf());
+    //--end logging og suspicious treeTops
 
     if (verbose)
     {
@@ -84,8 +120,11 @@ void WalkOverTreeIL::walkTheTreeForInfo()
                 traverseBlock(block->getEntry(), _comp);
         }
 
+
         // AuxillaryInfo::printTreeTopKinds(_comp);
     }
+            // Restore original cout buffer
+        std::cout.rdbuf(originalCoutBuffer);
 }
 
 void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
@@ -111,125 +150,131 @@ void WalkOverTreeIL::traverseBlock(TR::TreeTop *tt, TR::Compilation *comp)
 
         switch (sk)
         {
-        case StatementKind::FieldStoreStmt:
+        // case StatementKind::FieldStoreStmt:
+        // {
+        //     std::cout << "[" << node << "] is a store\n";
+        //     StoreStmt *st = new StoreStmt(treeTop, stmtInfo);
+        //     std::set<TR::Node *> baseNode = st->getNodePointedByBase();
+        //     std::set<TR::Node *> storedNode = st->getNodeToBeStoredIntoBase();
+
+        //     std::vector<TR::Node *> fromNodes;
+
+        //     for (auto node : baseNode)
+        //     {
+        //         if (stmtInfo->lhsFieldStack.size() == 1)
+        //         {
+        //             fromNodes.push_back(node);
+        //         }
+        //         else
+        //         {
+        //             treeTop->_in->findNodes(node, stmtInfo->lhsFieldStack, 0, stmtInfo->lhsFieldStack.size() - 2, fromNodes);
+        //         }
+        //     }
+        //     std::cout << "[";
+        //     for (auto node : fromNodes)
+        //     {
+        //         std::cout << node << " ";
+        //     }
+        //     std::cout << "]\n";
+        //     std::cout << " -->  [";
+
+        //     std::vector<TR::Node *> toNodes;
+        //     for (auto node : storedNode)
+        //     {
+        //         if (stmtInfo->rhsFieldStack.size() == 0)
+        //         {
+        //             toNodes.push_back(node);
+        //         }
+        //         else
+        //         {
+        //             treeTop->_in->findNodes(node, stmtInfo->rhsFieldStack, 0, stmtInfo->rhsFieldStack.size() - 1, toNodes);
+        //         }
+        //     }
+        //     for (auto node : toNodes)
+        //     {
+        //         std::cout << node << " ";
+        //     }
+        //     std::cout << "]\n";
+
+        //     // // whenever you add support for HeapificationAtSTore , uncomment below block to remove redundant HC containing tree
+        //     // //  checking if there exists a path between any fromNode to any other toNode (might refine later)
+        //     // std::cout << "for a.f* = b.f* [" << node << "] checking if PATH EXISTS => ";
+        //     // bool foundPath = false;
+
+        //     // for (auto fromNode : fromNodes)
+        //     // {
+        //     //     for (auto toNode : toNodes)
+        //     //     {
+        //     //         std::unordered_set<TR::Node *> visited;
+        //     //         if (treeTop->_in->pathExistBetween(fromNode, toNode, visited))
+        //     //         {
+        //     //             if (treeTop->getPrevTreeTop()->getNode()->getOpCodeValue() == TR::possibleHeapificationAtStore)
+        //     //             {
+        //     //                 std::cout << " YES";
+        //     //                 foundPath = true;
+        //     //                 TR::TransformUtil::removeTree(comp, treeTop->getPrevTreeTop());
+        //     //             }
+        //     //             std::cout << " was checking is prev HeapificationAtStore for this node [" << treeTop->getPrevTreeTop()->getNode() << "]";
+        //     //         }
+        //     //         else
+        //     //         {
+        //     //             std::cout << "NO";
+        //     //         }
+        //     //         std::cout << "\n";
+        //     //         if (foundPath)
+        //     //         {
+        //     //             break;
+        //     //         }
+        //     //     }
+        //     //     if (foundPath)
+        //     //     {
+        //     //         break;
+        //     //     }
+        //     // }
+        //     // //HC block removal ends
+
+        //     bool isFromNodeSetLocal = isNodeSetLocal(fromNodes);
+        //     bool isToNodeSetLocal = isNodeSetLocal(toNodes);
+        //     std::cout << std::boolalpha // treats 1 and 0 as true and false for this particlar stream
+        //               << "isFromNodeSetLocal: " << isFromNodeSetLocal << "\n"
+        //               << "isToNodeSetLocal: " << isToNodeSetLocal << std::endl;
+
+        //     // per method debug Counters can be done this way?
+        //     TR::ResolvedMethodSymbol *resolvedMethodSymbol = _comp->getMethodSymbol();
+        //     const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
+        //     std::string counterName =
+        //         std::string("StoreInstance") + name + "/fromToBothLocal";
+
+        //     const char *bothLocalCtr = TR::DebugCounter::debugCounterName(comp, counterName.c_str());
+
+        //     counterName =
+        //         std::string("StoreInstance") + name + "/FromOrToNonLocal";
+        //     const char *eitherOneNonLocal = TR::DebugCounter::debugCounterName(comp, counterName.c_str());
+
+        //     // // trying to add debugCounters
+        //     //         const char *bothLocalCtr = TR::DebugCounter::debugCounterName(comp, "StoreInstance/fromToBothLocal");
+        //     //         const char *eitherOneNonLocal = TR::DebugCounter::debugCounterName(comp, "StoreInstance/FromOrToNonLocal");
+
+        //     if (isFromNodeSetLocal && isToNodeSetLocal)
+        //     {
+        //         std::cout << "adding debug ctr fromToBothLocal before TreeTop(Node) " << node << "\n";
+        //         addDebugCounters(comp, bothLocalCtr, treeTop);
+        //     }
+        //     else
+        //     {
+        //         std::cout << "adding debug ctr FromOrToNonLocal before TreeTop(Node) " << node << "\n";
+
+        //         addDebugCounters(comp, eitherOneNonLocal, treeTop);
+        //     }
+        //     // AuxillaryInfo::getAuxillaryLogger()->printf("xyz\n");
+
+        //     break;
+        // }
+        case StatementKind::YetToDecideStmt:
         {
-            std::cout << "[" << node << "] is a store\n";
-            StoreStmt *st = new StoreStmt(treeTop, stmtInfo);
-            std::set<TR::Node *> baseNode = st->getNodePointedByBase();
-            std::set<TR::Node *> storedNode = st->getNodeToBeStoredIntoBase();
-
-            std::vector<TR::Node *> fromNodes;
-
-            for (auto node : baseNode)
-            {
-                if (stmtInfo->lhsFieldStack.size() == 1)
-                {
-                    fromNodes.push_back(node);
-                }
-                else
-                {
-                    treeTop->_in->findNodes(node, stmtInfo->lhsFieldStack, 0, stmtInfo->lhsFieldStack.size() - 2, fromNodes);
-                }
-            }
-            std::cout << "[";
-            for (auto node : fromNodes)
-            {
-                std::cout << node << " ";
-            }
-            std::cout << "]\n";
-            std::cout << " -->  [";
-
-            std::vector<TR::Node *> toNodes;
-            for (auto node : storedNode)
-            {
-                if (stmtInfo->rhsFieldStack.size() == 0)
-                {
-                    toNodes.push_back(node);
-                }
-                else
-                {
-                    treeTop->_in->findNodes(node, stmtInfo->rhsFieldStack, 0, stmtInfo->rhsFieldStack.size() - 1, toNodes);
-                }
-            }
-            for (auto node : toNodes)
-            {
-                std::cout << node << " ";
-            }
-            std::cout << "]\n";
-
-            // // whenever you add support for HeapificationAtSTore , uncomment below block to remove redundant HC containing tree
-            // //  checking if there exists a path between any fromNode to any other toNode (might refine later)
-            // std::cout << "for a.f* = b.f* [" << node << "] checking if PATH EXISTS => ";
-            // bool foundPath = false;
-
-            // for (auto fromNode : fromNodes)
-            // {
-            //     for (auto toNode : toNodes)
-            //     {
-            //         std::unordered_set<TR::Node *> visited;
-            //         if (treeTop->_in->pathExistBetween(fromNode, toNode, visited))
-            //         {
-            //             if (treeTop->getPrevTreeTop()->getNode()->getOpCodeValue() == TR::possibleHeapificationAtStore)
-            //             {
-            //                 std::cout << " YES";
-            //                 foundPath = true;
-            //                 TR::TransformUtil::removeTree(comp, treeTop->getPrevTreeTop());
-            //             }
-            //             std::cout << " was checking is prev HeapificationAtStore for this node [" << treeTop->getPrevTreeTop()->getNode() << "]";
-            //         }
-            //         else
-            //         {
-            //             std::cout << "NO";
-            //         }
-            //         std::cout << "\n";
-            //         if (foundPath)
-            //         {
-            //             break;
-            //         }
-            //     }
-            //     if (foundPath)
-            //     {
-            //         break;
-            //     }
-            // }
-            // //HC block removal ends
-
-            bool isFromNodeSetLocal = isNodeSetLocal(fromNodes);
-            bool isToNodeSetLocal = isNodeSetLocal(toNodes);
-            std::cout << std::boolalpha // treats 1 and 0 as true and false for this particlar stream
-                      << "isFromNodeSetLocal: " << isFromNodeSetLocal << "\n"
-                      << "isToNodeSetLocal: " << isToNodeSetLocal << std::endl;
-
-            // per method debug Counters can be done this way?
-            TR::ResolvedMethodSymbol *resolvedMethodSymbol = _comp->getMethodSymbol();
-            const char *name = resolvedMethodSymbol->getResolvedMethod()->nameChars();
-            std::string counterName =
-                std::string("StoreInstance") + name + "/fromToBothLocal";
-
-            const char *bothLocalCtr = TR::DebugCounter::debugCounterName(comp, counterName.c_str());
-
-            counterName =
-                std::string("StoreInstance") + name + "/FromOrToNonLocal";
-            const char *eitherOneNonLocal = TR::DebugCounter::debugCounterName(comp, counterName.c_str());
-
-            // // trying to add debugCounters
-            //         const char *bothLocalCtr = TR::DebugCounter::debugCounterName(comp, "StoreInstance/fromToBothLocal");
-            //         const char *eitherOneNonLocal = TR::DebugCounter::debugCounterName(comp, "StoreInstance/FromOrToNonLocal");
-
-            if (isFromNodeSetLocal && isToNodeSetLocal)
-            {
-                std::cout << "adding debug ctr fromToBothLocal before TreeTop(Node) " << node << "\n";
-                addDebugCounters(comp, bothLocalCtr, treeTop);
-            }
-            else
-            {
-                std::cout << "adding debug ctr FromOrToNonLocal before TreeTop(Node) " << node << "\n";
-
-                addDebugCounters(comp, eitherOneNonLocal, treeTop);
-            }
-            // AuxillaryInfo::getAuxillaryLogger()->printf("xyz\n");
-
-            break;
+            
+            if(node->getOpCode().isRef())
+                std::cout<<"SUSPICIOUS [" <<node <<"]\n";
         }
         }
     }

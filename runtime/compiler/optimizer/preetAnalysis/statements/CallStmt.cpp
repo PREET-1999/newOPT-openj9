@@ -78,9 +78,10 @@ PTG *CallStmt::Gen()
         // there is a non void return
         genPTG->setPointsToOfKeyInStackToBottom(lhsSlot);
     }
-    std::cout << "genPTG after CallStmt processed is \n";
+       std::cout<<" [ CALL : GEN ]\n";
     genPTG->printStack();
     genPTG->printHeap();
+    std::cout<<" [ ---CALL : GEN----- ]\n";
     return genPTG;
 }
 
@@ -129,9 +130,10 @@ PTG *CallStmt::Kill()
             killPTG->insertIntoStack(lhsSlot, node);
         }
     }
-    std::cout << "KillPTG after CallStmt processed is \n";
+       std::cout<<" [ CALL : KILL ]\n";
     killPTG->printStack();
     killPTG->printHeap();
+    std::cout<<" [ ---CALL : KILL----- ]\n";
     return killPTG;
 }
 
