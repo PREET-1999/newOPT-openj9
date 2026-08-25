@@ -8,6 +8,7 @@
 #include "optimizer/preetAnalysis/statements/CallStmt.hpp"
 #include "optimizer/preetAnalysis/statements/UnknownStmt.hpp"
 #include "optimizer/preetAnalysis/AuxillaryInfo.hpp"
+#include "il/MustReachability.hpp"
 
 #include "codegen/CodeGenerator.hpp"
 #include "compile/Compilation.hpp"
@@ -225,9 +226,10 @@ void IntraDataFlow::shoutOutLoud(TR::TreeTop *tt, StatementInfoTable *stmtInfo)
     }
     }
 }
-IntraDataFlow::IntraDataFlow(TR::Compilation *comp)
+IntraDataFlow::IntraDataFlow(TR::Compilation *comp, bool fixedPoint)
 {
     _comp = comp;
+    isFixedPointAchieved = fixedPoint;
 }
 std::pair<StatementKind, StatementInfoTable *>
 IntraDataFlow::findTreeTopType(TR::TreeTop *tt)
@@ -574,27 +576,33 @@ bool IntraDataFlow::checkIfCallStmt(TR::TreeTop *tt)
 //             predTreeTop = treeTop->_out;
 //         }
 // }
-
-bool isTreeTopLoad(TR::TreeTop *tt)
+TR::Node *isNewNode(TR::Node *n)
 {
-    TR::Node *n = tt->getNode();
+    if (n->getOpCode().isNew())
+        return n;
+    if (n->getNumChildren() > 0 && n->getFirstChild()->getOpCode().isNew())
+        return n->getFirstChild();
+
+    return nullptr;
+}
+TR::Node *isLoadNode(TR::Node *n)
+{
 
     if (n->getOpCode().isLoad())
     {
-        return true;
+        return n;
     }
-    return false;
+    return nullptr;
 }
 
-TR::Node *isTreeTopStore(TR::TreeTop *tt)
+TR::Node *isStoreNode(TR::Node *n)
 {
     // cout << "store node finding....got " << tt->getNode()->getStoreNode() << "\n";
-    return tt->getNode()->getStoreNode();
+    return n->getStoreNode();
 }
 
-TR::Node *isTreeTopCall(TR::TreeTop *tt)
+TR::Node *isCallNode(TR::Node *n)
 {
-    TR::Node *n = tt->getNode();
 
     if (n->getOpCode().isCall())
         return n;
@@ -619,8 +627,13 @@ int getAuto(TR::Node *node)
 
             return slot;
         }
+        else if (sym->getKind() == TR::Symbol::IsParameter) // can be this,explicit params
+        {
+            int32_t slot = symRef->getCPIndex();
+            return slot;
+        }
     }
-    return 0; // couldnt find auto
+    return -1;
 }
 TR::SymbolReference *getSymRef(TR::Node *node)
 {
@@ -628,10 +641,18 @@ TR::SymbolReference *getSymRef(TR::Node *node)
         return nullptr;
 
     TR::SymbolReference *symRef = node->getSymbolReference();
+    if (symRef && symRef->getSymbol() && symRef->getSymbol()->isShadow())
+    {
+        std::cout << "getSymref FIELD hai chalo good\n";
+    }
+    else
+    {
+        std::cout << "getSymref FIELD NAI hai, toh kyaaaa haiiiii yehhhh\n";
+    }
     return symRef;
 }
 
-std::set<TR::Node *> IntraDataFlow::processLoadNode(TR::Node *node, PTG *in)
+std::set<TR::Node *> IntraDataFlow::processLoadNode(TR::Node *node, PTG *in, PTG *tempOut)
 {
     if (!node)
     {
@@ -650,6 +671,7 @@ std::set<TR::Node *> IntraDataFlow::processLoadNode(TR::Node *node, PTG *in)
     if (node->getOpCode().isLoadDirect())
     {
         int autoSlot = getAuto(node);
+        std::cout << "auto (slot) for node " << node << " computed as" << autoSlot << "\n";
         std::set<TR::Node *> stackNodeSet = in->getNodeSetForKeyInStack(autoSlot);
         // push to table
         for (auto stackNode : stackNodeSet)
@@ -663,7 +685,7 @@ std::set<TR::Node *> IntraDataFlow::processLoadNode(TR::Node *node, PTG *in)
     {
         std::set<TR::Node *> loadedNodes;
         TR::SymbolReference *field = getSymRef(node);
-        std::set<TR::Node *> childNodes = processLoadNode(node->getChild(0), in);
+        std::set<TR::Node *> childNodes = processNode(node->getChild(0), in, tempOut);
         for (auto childNode : childNodes)
         {
             std::set<TR::Node *> heapNodeSet = in->getNodeSetForKeyInHeap(std::pair<TR::Node *, TR::SymbolReference *>{childNode, field});
@@ -679,10 +701,10 @@ std::set<TR::Node *> IntraDataFlow::processLoadNode(TR::Node *node, PTG *in)
     return {};
 }
 
-void IntraDataFlow::processStoreNode(TR::Node *node, PTG *in, PTG *tempOut)
+std::set<TR::Node *> IntraDataFlow::processStoreNode(TR::Node *node, PTG *in, PTG *tempOut)
 {
     if (!node)
-        return;
+        return {};
     if (node->getChild(0) && node->getChild(0)->getOpCode().isNew())
     {
         TR::Node *newNode = node->getChild(0);
@@ -692,7 +714,7 @@ void IntraDataFlow::processStoreNode(TR::Node *node, PTG *in, PTG *tempOut)
 
         // gen
         tempOut->insertIntoStack(autoSlot, newNode);
-        return; // else will execute the next "if" of isStoreDirect
+        return {}; // else will wrongly jump to execute the next "if case" of isStoreDirect
     }
 
     if (node->getOpCode().isStoreDirect())
@@ -702,7 +724,7 @@ void IntraDataFlow::processStoreNode(TR::Node *node, PTG *in, PTG *tempOut)
         tempOut->deletekeyFromFromStack(autoSlot);
 
         // gen
-        std::set<TR::Node *> nodesToBeStored = processLoadNode(node->getChild(0), in);
+        std::set<TR::Node *> nodesToBeStored = processNode(node->getChild(0), in, tempOut);
         for (auto storeNode : nodesToBeStored)
         {
             tempOut->insertIntoStack(autoSlot, storeNode);
@@ -713,50 +735,94 @@ void IntraDataFlow::processStoreNode(TR::Node *node, PTG *in, PTG *tempOut)
     {
         std::cout << "indirect store : " << node << "\n";
         TR::SymbolReference *f = getSymRef(node);
-        std::set<TR::Node *> fromNodes = processLoadNode(node->getFirstChild(), in);
-        std::set<TR::Node *> toNodes = processLoadNode(node->getSecondChild(), in);
+        std::set<TR::Node *> fromNodes = processNode(node->getFirstChild(), in, tempOut);
+        std::set<TR::Node *> toNodes = processNode(node->getSecondChild(), in, tempOut);
 
-        //no need to gen in these case
+        // as of now without worrying about _|_, test for MUst
+        if (isFixedPointAchieved)
+        {
+            std::cout << "for indirect store : " << node
+                      << " [from] is a " << (in->isMust(fromNodes) ? "MUST" : "MAY")
+                      << " info\n";
+
+            std::cout << "for indirect store : " << node
+                      << " [to] is a " << (in->isMust(toNodes) ? "MUST" : "MAY")
+                      << " info\n";
+
+            MustReachResult r = mustReachableQuery(*in, fromNodes, toNodes);
+            // switch (r)
+            // {
+            // case MustReachResult::MUST_REACHABLE:
+            //     std::cout << node << ": MUST reachable\n";
+            //     break;
+            // case MustReachResult::NOT_REACHABLE:
+            //     std::cout << node << ": NOT reachable\n";
+            //     break;
+            // case MustReachResult::NOT_APPLICABLE:
+            //     std::cout << node << ": N/A (base not MUST-singleton)\n";
+            //     break;
+            // }
+        }
+
+        // must test ended
+
+        // no need to gen in these case
         for (auto a : fromNodes)
         {
             if (in->doesStarFieldFromNodeExists(a))
             {
                 // no need to add anything to heap and no further processing
-                return;
+                return {};
             }
         }
         // - Is lhsBase.f..(n - 1 ) or fromNodes tak any of it pointing to bottom
         for (auto a : fromNodes)
         {
             if (a == nullptr) // can you have a routine isBOttom rather than direct nullptr
-                return;
+                return {};
         }
 
+        // STRONG vs WEAK UPDATE
+        bool strongUpdate = PTG::isMust(fromNodes); // fromNodes has exactly one
+                                                    // real (non-?, non-bottom) base
 
-
-
-
-        //can gen
-        for (auto a : fromNodes)
+        if (strongUpdate) // strong update
         {
+            TR::Node *a = *fromNodes.begin();
+            std::pair<TR::Node *, TR::SymbolReference *> key = {a, f};
 
+            // KILL: wipe any previous pointee set for (a,f) before writing
+            tempOut->deleteKeyFromHeap(key);
+
+            // GEN: write only what b currently points to
             for (auto b : toNodes)
+                tempOut->insertIntoHeap(key, b);
+        }
+        else // weak Update
+        {
+            // GEN
+            for (auto a : fromNodes)
             {
-
                 std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {a, f};
-                tempOut->insertIntoHeap(NodeObjectField, b);
+
+                for (auto b : toNodes)
+                {
+
+                    tempOut->insertIntoHeap(NodeObjectField, b);
+                }
             }
         }
     }
+    return {};
 }
 
-TR::Node *IntraDataFlow::processCallNode(TR::Node *node, PTG *in, PTG *tempOut)
+std::set<TR::Node *> IntraDataFlow::processCallNode(TR::Node *node, PTG *in, PTG *tempOut)
 {
     TR::Node *bottomNode = nullptr;
 
     // to-do : process args.*=_|_
     if (!node)
-        return bottomNode;
+        return {}; // return {bottomNode} or  {}...
 
     int globalNodeNo = node->getGlobalIndex();
     globalNumberToNodeMap[globalNodeNo].insert(bottomNode);
@@ -768,7 +834,7 @@ TR::Node *IntraDataFlow::processCallNode(TR::Node *node, PTG *in, PTG *tempOut)
         for (i = 1; i < numArgs; i++)
         {
             cout << node->getChild(i) << " ";
-            std::set<TR::Node *> nodePointedByImplicitArg = processLoadNode(node->getChild(i), in);
+            std::set<TR::Node *> nodePointedByImplicitArg = processNode(node->getChild(i), in, tempOut);
             // kill
             for (auto argNode : nodePointedByImplicitArg)
             {
@@ -782,9 +848,9 @@ TR::Node *IntraDataFlow::processCallNode(TR::Node *node, PTG *in, PTG *tempOut)
             // gen
             TR::SymbolReference *starField = nullptr;
             for (auto argNode : nodePointedByImplicitArg)
-            {        
-                //if nodeFromArg points to bottom, no need to add to heap
-                if(argNode == nullptr)
+            {
+                // if nodeFromArg points to bottom, no need to add to heap
+                if (argNode == nullptr)
                     continue;
 
                 std::pair<TR::Node *, TR::SymbolReference *> NodeObjectField = {argNode, starField};
@@ -794,13 +860,61 @@ TR::Node *IntraDataFlow::processCallNode(TR::Node *node, PTG *in, PTG *tempOut)
         cout << "\n";
     }
 
-    return bottomNode;
+    return {bottomNode};
 }
 
-TR::Node *IntraDataFlow::processNewNode(TR::Node *node, PTG *in, PTG *tempOut)
+std::set<TR::Node *> IntraDataFlow::processNewNode(TR::Node *node, PTG *in, PTG *tempOut)
 {
-    // will need this, I anticipate .
-    return nullptr;
+    if (!node)
+    {
+        return {};
+    }
+
+    int globalNodeNo = node->getGlobalIndex();
+
+    auto it = globalNumberToNodeMap.find(globalNodeNo);
+    if (it != globalNumberToNodeMap.end())
+    {
+        // Key exists
+        return it->second;
+    }
+    globalNumberToNodeMap[globalNodeNo].insert({node});
+
+    // null initiliZe fields
+    std::cout<<"null initializing fields, fieldsToBEINitialized length " <<fieldsToBeInitialized.size() <<"\n";
+    for (TR::SymbolReference *field : fieldsToBeInitialized)
+    {
+        std::pair<TR::Node *, TR::SymbolReference *> key = {node, field};
+        tempOut->insertIntoHeap(key, PTG::nullConstNode());
+    }
+    return {node};
+}
+
+std::set<TR::Node *> IntraDataFlow::processNode(TR::Node *node, PTG *in, PTG *out)
+{
+    TR::Node *loadNode = isLoadNode(node);
+    if (loadNode)
+    {
+        return processLoadNode(loadNode, in, out);
+    }
+    TR::Node *storeNode = isStoreNode(node);
+    if (storeNode)
+    {
+        return processStoreNode(storeNode, in, out);
+    }
+
+    TR::Node *callNode = isCallNode(node);
+    if (callNode)
+    {
+        return processCallNode(callNode, in, out);
+    }
+
+    TR::Node *newNode = isNewNode(node);
+    if (newNode)
+    {
+        return processNewNode(newNode, in, out);
+    }
+    return {};
 }
 
 // preet just remove this as this was just to check whether you couldconfine treetops witin basic blocks
@@ -953,6 +1067,10 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
     // }
 
     // trying the new TAC approach of per node processing
+
+    // clear the globalNumberToNodeMap
+    globalNumberToNodeMap.clear();
+
     for (TR::TreeTop *treeTop = block->getEntry();
          treeTop != block->getExit()->getNextTreeTop();
          treeTop = treeTop->getNextTreeTop())
@@ -973,31 +1091,33 @@ void IntraDataFlow::performAnalysis(TR::TreeTop *tt, TR::Compilation *comp)
         PTG *out = st->SetUnion(filteredSet, gen);
         treeTop->_out = out;
 
-        if (isTreeTopLoad(treeTop))
-        {
-            std::set<TR::Node *> loadedNodes = processLoadNode(treeTop->getNode(), treeTop->_in);
-            std::cout << "Post Load Processing for node:" << treeTop->getNode() << "\n";
-            for (auto loadNode : loadedNodes)
-            {
-                std::cout << "pushed/was in table : [" << loadNode << "]\n";
-            }
-        }
-        TR::Node *isStoreNode = isTreeTopStore(treeTop);
-        if (isStoreNode)
-        {
-            processStoreNode(isStoreNode, treeTop->_in, treeTop->_out);
+        processNode(treeTop->getNode(), treeTop->_in, treeTop->_out);
 
-            // post store processing
-            std::cout << "Post Store Processing for node:" << treeTop->getNode() << "\n";
-            treeTop->_out->printStack();
-            treeTop->_out->printHeap();
-        }
-        TR::Node *isCallNode = isTreeTopCall(treeTop);
-        if (isCallNode)
-        {
-            processCallNode(isCallNode, treeTop->_in, treeTop->_out);
-        }
+        // if (isTreeTopLoad(treeTop))
+        // {
+        //     std::set<TR::Node *> loadedNodes = processLoadNode(treeTop->getNode(), treeTop->_in);
+        //     std::cout << "Post Load Processing for node:" << treeTop->getNode() << "\n";
+        //     for (auto loadNode : loadedNodes)
+        //     {
+        //         std::cout << "pushed/was in table : [" << loadNode << "]\n";
+        //     }
+        // }
+        // TR::Node *isStoreNode = isTreeTopStore(treeTop);
+        // if (isStoreNode)
+        // {
+        //     processStoreNode(isStoreNode, treeTop->_in, treeTop->_out);
 
+        //     // post store processing
+        //     std::cout << "Post Store Processing for node:" << treeTop->getNode() << "\n";
+        //     treeTop->_out->printStack();
+        //     treeTop->_out->printHeap();
+        // }
+        // TR::Node *isCallNode = isTreeTopCall(treeTop);
+        // if (isCallNode)
+        // {
+        //     processCallNode(isCallNode, treeTop->_in, treeTop->_out);
+        // }
+        treeTop->printDataFlow(); // can remove this, as this just adds pretty prints
         predTreeTop = treeTop->_out;
     }
     // deliberately returning to avoid further processing
@@ -1155,6 +1275,36 @@ void IntraDataFlow::setInSetOfFirstTreeTopOfBlock(TR::Block *block)
     if (block->getEntry() == NULL)
         return;
 
+    // ---------------------------------------------------------
+    // Special case: method entry block.
+    //
+    // Every local is initialized to '?' at method entry.
+    // '?' means:
+    //     "there has been no definition of this local yet
+    //      on this path."
+    //
+    // also adding [params,locals] to point to bottom along with local initialization
+    // ---------------------------------------------------------
+    if (block == _comp->getStartBlock())
+    {
+        PTG *initialPTG = new PTG();
+
+        TR::Node *questionNode = PTG::unknownNode();
+
+        for (auto autoVar : variablesToBeInitialized)
+        {
+            initialPTG->insertIntoStack(autoVar, questionNode);
+        }
+        TR::Node *bottom = nullptr;
+        for (auto param : paramsToBeInitialized)
+        {
+            initialPTG->insertIntoStack(param, bottom);
+        }
+        block->getEntry()->_in = initialPTG;
+
+        return;
+    }
+
     // first check whats the treeTops node of this block's first TreeTop
     // std::cout << "We would be calculating InSet for this TreeTop(node) " << block->getEntry()->getNode() << "\n";
 
@@ -1190,8 +1340,146 @@ void IntraDataFlow::setInSetOfFirstTreeTopOfBlock(TR::Block *block)
         block->getEntry()->_in = merged;
     }
 }
+void IntraDataFlow::populateLocalVariablesAndParams(TR::Compilation *comp)
+{
+
+    variablesToBeInitialized.clear();
+    paramsToBeInitialized.clear();
+    // ---------------------------------------------------------
+    // Discover all auto/reference variables relevant to the
+    // points-to analysis for this method.
+    // ---------------------------------------------------------
+    TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp->getMethodSymbol();
+
+    TR::AutomaticSymbol *p;
+    ListIterator<TR::AutomaticSymbol> locals(&comp->getMethodSymbol()->getAutomaticList());
+    std::cout << "locals for " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << " : ";
+    for (p = locals.getFirst(); p != NULL; p = locals.getNext())
+    {
+        std::cout << p << " ";
+    }
+    std::cout << "\n";
+
+    std::cout << "locals(slots) for " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << " : ";
+    TR_Array<List<TR::SymbolReference>> *autosListArray = resolvedMethodSymbol->getAutoSymRefs();
+    for (auto i = 0U; autosListArray && i < autosListArray->size(); ++i)
+    {
+        List<TR::SymbolReference> autosList = (*autosListArray)[i];
+        ListIterator<TR::SymbolReference> autosIt(&autosList);
+
+        for (TR::SymbolReference *symRef = autosIt.getFirst(); symRef; symRef = autosIt.getNext())
+        {
+            TR::Symbol *sym = symRef->getSymbol();
+            if (sym->getKind() == TR::Symbol::IsAutomatic)
+            {
+                int32_t slot = symRef->getCPIndex();
+                cout << "(auto) " << slot << " ";
+                variablesToBeInitialized.insert(slot);
+            }
+            else if (sym->getKind() == TR::Symbol::IsParameter)
+            {
+                int32_t slot = symRef->getCPIndex();
+                cout << "(param) " << slot << " ";
+                paramsToBeInitialized.insert(slot);
+            }
+            else
+            {
+                cout << "my sym type is " << sym->getKind() << " ";
+            }
+        }
+        std::cout << "\n";
+    }
+}
+void IntraDataFlow::populateFields(TR::Compilation *comp)
+// testing to find all the fields for a comp object
+{
+    fieldsToBeInitialized.clear();
+    TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp->getMethodSymbol();
+    std::cout << "fields for " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << " : \n";
+
+    TR::SymbolReferenceTable *symRefTab = comp->getSymRefTab();
+    if (symRefTab)
+    {
+        for (int32_t symRefNumber = symRefTab->getIndexOfFirstSymRef(); symRefNumber < symRefTab->getNumSymRefs(); symRefNumber++)
+        {
+
+            TR::SymbolReference *symRef = symRefTab->getSymRef(symRefNumber);
+            if (symRef)
+            {
+                if (symRef->getSymbol())
+                {
+                    if (symRef->getSymbol()->isShadow() && symRef->getCPIndex()>0)
+                    {
+                        std::cout << "Field Const Pool index ->" << symRef->getCPIndex() << "\n";
+                        fieldsToBeInitialized.insert(symRef);
+                    }
+                }
+            }
+        }
+    }
+}
 void IntraDataFlow::performAnalysisOverCFG(TR::Compilation *comp)
 {
+    // dummy stuffs to get  "?" working
+    {
+        TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp->getMethodSymbol();
+
+        TR::AutomaticSymbol *p;
+        ListIterator<TR::AutomaticSymbol> locals(&comp->getMethodSymbol()->getAutomaticList());
+        std::cout << "locals for " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << " : ";
+        for (p = locals.getFirst(); p != NULL; p = locals.getNext())
+        {
+            std::cout << p << " ";
+        }
+        std::cout << "\n";
+
+        // checking If I can initialize locals with "?"
+        std::vector<int> variablesToBeInitialed;
+
+        std::cout << "locals(slots) for " << resolvedMethodSymbol->getResolvedMethod()->nameChars() << " : ";
+        TR_Array<List<TR::SymbolReference>> *autosListArray = resolvedMethodSymbol->getAutoSymRefs();
+        for (auto i = 0U; autosListArray && i < autosListArray->size(); ++i)
+        {
+            List<TR::SymbolReference> autosList = (*autosListArray)[i];
+            ListIterator<TR::SymbolReference> autosIt(&autosList);
+
+            for (TR::SymbolReference *symRef = autosIt.getFirst(); symRef; symRef = autosIt.getNext())
+            {
+                TR::Symbol *sym = symRef->getSymbol();
+                if (sym->getKind() == TR::Symbol::IsAutomatic)
+                {
+                    int32_t slot = symRef->getCPIndex();
+                    cout << "(auto) " << slot << " ";
+                    variablesToBeInitialed.push_back(slot);
+                }
+                else if (sym->getKind() == TR::Symbol::IsParameter)
+                {
+                    int32_t slot = symRef->getCPIndex();
+                    cout << "(param) " << slot << " ";
+                }
+                else
+                {
+                    cout << "my sym type is " << sym->getKind() << " ";
+                }
+            }
+            std::cout << "\n";
+        }
+        PTG *dummyPTG = new PTG();
+        TR::Node *unknownNode = PTG::unknownNode();
+        for (auto autoVar : variablesToBeInitialed)
+        {
+
+            dummyPTG->insertIntoStack(autoVar, unknownNode);
+        }
+        dummyPTG->printStack();
+        //--end--
+    }
+
+    //--end--
+
+    // collecting locals for this compilation(to mark as locals->"?" further)
+    populateLocalVariablesAndParams(comp);
+    populateFields(comp);
     // clear the globalNumberToNodeMap
     globalNumberToNodeMap.clear();
     TR::ResolvedMethodSymbol *resolvedMethodSymbol = comp->getMethodSymbol();
